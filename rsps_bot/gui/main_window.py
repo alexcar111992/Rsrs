@@ -5,7 +5,7 @@ import sys
 import os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QLabel, QStatusBar, QMessageBox,
+    QHBoxLayout, QFormLayout, QPushButton, QLabel, QStatusBar, QMessageBox,
     QFileDialog, QComboBox, QGroupBox, QLineEdit, QCheckBox,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
@@ -15,6 +15,7 @@ from rsps_bot.core.bot_engine import BotEngine
 from rsps_bot.core.config import BotProfile, LAYOUT_PRESETS
 from rsps_bot.core.screen_capture import WindowInfo
 from rsps_bot.gui.tab_combat import CombatTab
+from rsps_bot.gui.tab_skilling import SkillingTab
 from rsps_bot.gui.tab_inventory import InventoryTab
 from rsps_bot.gui.tab_loot import LootTab
 from rsps_bot.gui.tab_login import LoginTab
@@ -32,7 +33,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RSPS Bot Client v1.0 - No Scripts Needed")
-        self.setMinimumSize(780, 680)
+        self.setMinimumSize(920, 720)
+        self.resize(960, 760)
 
         self.engine = BotEngine()
         self.profile = BotProfile()
@@ -57,14 +59,17 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
+        root.setSpacing(6)
+        root.setContentsMargins(8, 8, 8, 8)
 
         # ── Game Client Section ───────────────────────────────────────
         client_group = QGroupBox("Game Client")
-        client_lay = QVBoxLayout(client_group)
+        client_form = QFormLayout(client_group)
+        client_form.setSpacing(8)
+        client_form.setContentsMargins(12, 20, 12, 10)
 
-        # Row 1: Client .jar path - browse or type your own
+        # Row 1: .jar file path
         jar_row = QHBoxLayout()
-        jar_row.addWidget(QLabel("Client Path (.jar):"))
         self.jar_path_edit = QLineEdit()
         self.jar_path_edit.setPlaceholderText(r"e.g. C:\Users\Conor\Desktop\Launcher Retro.jar")
         jar_row.addWidget(self.jar_path_edit, 1)
@@ -72,49 +77,39 @@ class MainWindow(QMainWindow):
         btn_browse.clicked.connect(self._browse_jar)
         jar_row.addWidget(btn_browse)
         btn_launch = QPushButton("Launch Client")
-        btn_launch.setStyleSheet("background:#1a6b1a;color:white;")
+        btn_launch.setStyleSheet("background:#1a6b1a; color:white;")
         btn_launch.clicked.connect(self._launch_client)
         jar_row.addWidget(btn_launch)
-        client_lay.addLayout(jar_row)
+        client_form.addRow("Client Path:", jar_row)
 
-        # Row 2: Window selection - auto-detected OR type custom title
+        # Row 2: Game window
         win_row = QHBoxLayout()
-        win_row.addWidget(QLabel("Game Window:"))
         self.window_combo = QComboBox()
-        self.window_combo.setEditable(True)  # User can type custom window title
-        self.window_combo.setMinimumWidth(280)
+        self.window_combo.setEditable(True)
         self.window_combo.lineEdit().setPlaceholderText("Select detected window or type window title...")
         win_row.addWidget(self.window_combo, 1)
         btn_refresh = QPushButton("Refresh")
         btn_refresh.clicked.connect(self._refresh_windows)
         win_row.addWidget(btn_refresh)
-        client_lay.addLayout(win_row)
+        client_form.addRow("Game Window:", win_row)
 
-        # Row 3: Layout + Simple Mode
-        opt_row = QHBoxLayout()
-        opt_row.addWidget(QLabel("Layout:"))
+        # Row 3: Layout
         self.layout_combo = QComboBox()
         self.layout_combo.addItems(LAYOUT_PRESETS.keys())
-        opt_row.addWidget(self.layout_combo)
-        opt_row.addSpacing(20)
+        self.layout_combo.setMaximumWidth(250)
+        client_form.addRow("Interface Layout:", self.layout_combo)
 
-        # SIMPLE MODE - the big feature for easy fights
-        self.chk_simple_mode = QCheckBox("SIMPLE MODE (just attack + loot, no food/inventory needed)")
-        self.chk_simple_mode.setStyleSheet("color: #a6e3a1; font-weight: bold;")
-        self.chk_simple_mode.setToolTip(
-            "Turn this ON when fighting NPCs you'll never die to.\n"
-            "The bot will only attack and pick up loot.\n"
-            "No food, no potions, no inventory management needed."
-        )
-        opt_row.addWidget(self.chk_simple_mode)
-        opt_row.addStretch()
-        client_lay.addLayout(opt_row)
+        # Row 4: Simple mode
+        self.chk_simple_mode = QCheckBox("SIMPLE MODE  -  just attack + loot, skip food/inventory (for easy NPCs)")
+        self.chk_simple_mode.setStyleSheet("color: #a6e3a1; font-weight: bold; font-size: 11px;")
+        client_form.addRow(self.chk_simple_mode)
 
         root.addWidget(client_group)
 
         # ── Tabs ──────────────────────────────────────────────────────
         self.tabs = QTabWidget()
         self.tab_combat = CombatTab()
+        self.tab_skilling = SkillingTab()
         self.tab_inventory = InventoryTab()
         self.tab_loot = LootTab()
         self.tab_login = LoginTab()
@@ -122,6 +117,7 @@ class MainWindow(QMainWindow):
         self.tab_antiban = AntibanTab()
 
         self.tabs.addTab(self.tab_combat, "Combat / NPC")
+        self.tabs.addTab(self.tab_skilling, "Skilling")
         self.tabs.addTab(self.tab_inventory, "Inventory")
         self.tabs.addTab(self.tab_loot, "Loot")
         self.tabs.addTab(self.tab_login, "Auto-Login")
@@ -129,32 +125,35 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_antiban, "Anti-Ban")
         root.addWidget(self.tabs, 1)
 
-        # Grey out inventory tab when simple mode is on
+        # Simple mode toggles
         self.chk_simple_mode.toggled.connect(self._on_simple_mode_toggled)
 
-        # ── Stats bar ─────────────────────────────────────────────────
+        # ── Live Stats ────────────────────────────────────────────────
         stats_box = QGroupBox("Live Stats")
         stats_lay = QHBoxLayout(stats_box)
+        stats_lay.setSpacing(20)
         self.lbl_kills = QLabel("Kills: 0")
         self.lbl_kph = QLabel("K/hr: 0")
         self.lbl_food = QLabel("Food: 0")
         self.lbl_loot = QLabel("Loot: 0")
         self.lbl_runtime = QLabel("Time: 0m")
         for lbl in (self.lbl_kills, self.lbl_kph, self.lbl_food, self.lbl_loot, self.lbl_runtime):
-            lbl.setFont(QFont("Consolas", 10))
+            lbl.setFont(QFont("Consolas", 10, QFont.Bold))
             stats_lay.addWidget(lbl)
+        stats_lay.addStretch()
         root.addWidget(stats_box)
 
-        # ── Control buttons ───────────────────────────────────────────
+        # ── Control Buttons ───────────────────────────────────────────
         btn_row = QHBoxLayout()
-        self.btn_start = QPushButton("START (F5)")
-        self.btn_start.setStyleSheet("background:#2a7a2a;color:white;font-size:14px;padding:8px;")
+        btn_row.setSpacing(8)
+        self.btn_start = QPushButton("  START (F5)  ")
+        self.btn_start.setStyleSheet("background:#2a7a2a; color:white; font-size:13px; padding:8px 16px;")
         self.btn_start.clicked.connect(self._start)
-        self.btn_pause = QPushButton("PAUSE (F7)")
-        self.btn_pause.setStyleSheet("background:#b58a00;color:white;font-size:14px;padding:8px;")
+        self.btn_pause = QPushButton("  PAUSE (F7)  ")
+        self.btn_pause.setStyleSheet("background:#b58a00; color:white; font-size:13px; padding:8px 16px;")
         self.btn_pause.clicked.connect(self._pause)
-        self.btn_stop = QPushButton("STOP (F6)")
-        self.btn_stop.setStyleSheet("background:#a02020;color:white;font-size:14px;padding:8px;")
+        self.btn_stop = QPushButton("  STOP (F6)  ")
+        self.btn_stop.setStyleSheet("background:#a02020; color:white; font-size:13px; padding:8px 16px;")
         self.btn_stop.clicked.connect(self._stop)
         btn_save = QPushButton("Save Profile")
         btn_save.clicked.connect(self._save_profile)
@@ -176,7 +175,6 @@ class MainWindow(QMainWindow):
     # ── Actions ───────────────────────────────────────────────────────
 
     def _browse_jar(self):
-        """Open file browser to pick a .jar client file."""
         path, _ = QFileDialog.getOpenFileName(
             self, "Select RSPS Client",
             os.path.expanduser("~\\Desktop"),
@@ -187,7 +185,6 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage(f"Client path set: {path}")
 
     def _launch_client(self):
-        """Launch the .jar client file."""
         path = self.jar_path_edit.text().strip()
         if not path:
             QMessageBox.warning(self, "No Path", "Enter or browse for a .jar client file first!")
@@ -195,80 +192,63 @@ class MainWindow(QMainWindow):
         if not os.path.isfile(path):
             QMessageBox.warning(self, "File Not Found", f"File not found:\n{path}")
             return
-
         try:
-            # Launch the .jar with Java
             subprocess.Popen(["java", "-jar", path], cwd=os.path.dirname(path))
             self.status_bar.showMessage(f"Launching: {os.path.basename(path)} ... wait a few seconds then click Refresh")
         except FileNotFoundError:
-            # Java not found, try javaw or direct execution
             try:
                 subprocess.Popen(["javaw", "-jar", path], cwd=os.path.dirname(path))
                 self.status_bar.showMessage(f"Launching: {os.path.basename(path)}")
             except FileNotFoundError:
-                QMessageBox.critical(
-                    self, "Java Not Found",
+                QMessageBox.critical(self, "Java Not Found",
                     "Java is not installed or not in PATH.\n"
-                    "Install Java from https://adoptium.net/ or https://java.com"
-                )
+                    "Install Java from https://adoptium.net/ or https://java.com")
         except Exception as e:
             QMessageBox.critical(self, "Launch Error", f"Failed to launch client:\n{e}")
 
     def _on_simple_mode_toggled(self, checked: bool):
-        """When Simple Mode is toggled, disable/enable inventory tab."""
         self.tab_inventory.setEnabled(not checked)
-        # Also visually indicate
-        idx = self.tabs.indexOf(self.tab_inventory)
+        inv_idx = self.tabs.indexOf(self.tab_inventory)
         if checked:
-            self.tabs.setTabText(idx, "Inventory (disabled - Simple Mode)")
-            self.status_bar.showMessage("Simple Mode ON - just attack, loot, repeat. No food/inventory needed.")
+            self.tabs.setTabText(inv_idx, "Inventory (Simple Mode)")
+            self.status_bar.showMessage("Simple Mode ON - attack + loot only, no food/inventory needed")
         else:
-            self.tabs.setTabText(idx, "Inventory")
+            self.tabs.setTabText(inv_idx, "Inventory")
 
     def _refresh_windows(self):
-        """Refresh the window list, keeping any custom text the user typed."""
         custom_text = self.window_combo.currentText()
         self.window_combo.clear()
         self._windows = []
-
         windows = self.engine.find_game_windows()
         self._windows = windows
         for w in windows:
             self.window_combo.addItem(f"{w.title} ({w.width}x{w.height})")
-
-        # Restore what user had selected/typed
         if custom_text:
             idx = self.window_combo.findText(custom_text)
             if idx >= 0:
                 self.window_combo.setCurrentIndex(idx)
             else:
-                # User typed a custom title - keep it
                 self.window_combo.setEditText(custom_text)
 
     def _find_window_by_text(self, text: str):
-        """Find a window matching the combo box text (exact match or title search)."""
-        # First check if it matches one of our detected windows
         for w in self._windows:
             display = f"{w.title} ({w.width}x{w.height})"
             if display == text:
                 return w
-
-        # Otherwise treat it as a title search (user typed custom text)
         if text.strip():
             matches = self.engine.find_game_windows(text.strip())
             if matches:
                 return matches[0]
-
         return None
 
     def _collect_profile(self) -> BotProfile:
-        """Read all GUI fields into a BotProfile."""
         p = BotProfile()
         p.layout = self.layout_combo.currentText()
         p.client_jar_path = self.jar_path_edit.text().strip()
         p.npc_targets = self.tab_combat.get_targets()
         p.combat = self.tab_combat.get_settings()
         p.combat.simple_mode = self.chk_simple_mode.isChecked()
+        p.skilling = self.tab_skilling.get_settings()
         p.inventory_actions = self.tab_inventory.get_actions()
         p.loot_rules = self.tab_loot.get_rules()
         p.login = self.tab_login.get_settings()
@@ -279,24 +259,19 @@ class MainWindow(QMainWindow):
         return p
 
     def _start(self):
-        # Find the game window
         text = self.window_combo.currentText().strip()
         if not text:
             QMessageBox.warning(self, "No Window",
                 "Select a game window from the dropdown, or type the window title!")
             return
-
         window = self._find_window_by_text(text)
         if not window:
             QMessageBox.warning(self, "Window Not Found",
                 f"Could not find a window matching:\n\"{text}\"\n\n"
                 "Make sure your RSPS client is open, then click Refresh.")
             return
-
         self.engine.set_window(window)
         self.status_bar.showMessage(f"Attached to: {window.title} ({window.width}x{window.height})")
-
-        # Collect profile from GUI
         profile = self._collect_profile()
         self.engine.apply_profile(profile)
         self.engine.start()
@@ -320,6 +295,7 @@ class MainWindow(QMainWindow):
             try:
                 profile = BotProfile.load(path)
                 self.tab_combat.load_profile(profile)
+                self.tab_skilling.load_profile(profile)
                 self.tab_inventory.load_profile(profile)
                 self.tab_loot.load_profile(profile)
                 self.tab_login.load_profile(profile)
@@ -346,20 +322,46 @@ class MainWindow(QMainWindow):
 
     def _apply_dark_theme(self):
         self.setStyleSheet("""
-            QMainWindow, QWidget { background: #1e1e2e; color: #cdd6f4; }
-            QGroupBox { border: 1px solid #45475a; border-radius: 6px; margin-top: 8px; padding-top: 14px; font-weight: bold; }
-            QGroupBox::title { subcontrol-origin: margin; left: 10px; }
-            QTabWidget::pane { border: 1px solid #45475a; border-radius: 4px; }
-            QTabBar::tab { background: #313244; padding: 6px 16px; margin-right: 2px; border-radius: 4px 4px 0 0; }
+            QMainWindow, QWidget {
+                background: #1e1e2e; color: #cdd6f4;
+                font-size: 11px;
+            }
+            QGroupBox {
+                border: 1px solid #45475a; border-radius: 6px;
+                margin-top: 10px; padding-top: 16px;
+                font-weight: bold; font-size: 12px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin; left: 10px; padding: 0 4px;
+            }
+            QTabWidget::pane {
+                border: 1px solid #45475a; border-radius: 4px;
+            }
+            QTabBar::tab {
+                background: #313244; padding: 7px 18px; margin-right: 2px;
+                border-radius: 4px 4px 0 0; font-size: 11px;
+            }
             QTabBar::tab:selected { background: #45475a; }
-            QComboBox, QLineEdit, QSpinBox { background: #313244; border: 1px solid #585b70; border-radius: 4px; padding: 4px 8px; color: #cdd6f4; }
-            QPushButton { background: #45475a; border: none; border-radius: 4px; padding: 6px 14px; color: #cdd6f4; }
+            QComboBox, QLineEdit, QSpinBox {
+                background: #313244; border: 1px solid #585b70;
+                border-radius: 4px; padding: 5px 8px; color: #cdd6f4;
+                min-height: 22px;
+            }
+            QPushButton {
+                background: #45475a; border: none; border-radius: 4px;
+                padding: 6px 14px; color: #cdd6f4;
+            }
             QPushButton:hover { background: #585b70; }
-            QCheckBox { spacing: 6px; }
-            QSlider::groove:horizontal { background: #313244; height: 6px; border-radius: 3px; }
-            QSlider::handle:horizontal { background: #89b4fa; width: 14px; margin: -4px 0; border-radius: 7px; }
-            QStatusBar { background: #181825; color: #a6adc8; }
+            QCheckBox { spacing: 8px; }
+            QSlider::groove:horizontal {
+                background: #313244; height: 6px; border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #89b4fa; width: 14px; margin: -4px 0; border-radius: 7px;
+            }
+            QStatusBar { background: #181825; color: #a6adc8; font-size: 11px; }
             QLabel { color: #cdd6f4; }
+            QScrollArea { border: none; }
         """)
 
     def closeEvent(self, event):

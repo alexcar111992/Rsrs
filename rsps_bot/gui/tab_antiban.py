@@ -1,7 +1,7 @@
 """Anti-Ban tab - settings to look more human."""
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QSpinBox, QCheckBox, QSlider,
 )
 from PyQt5.QtCore import Qt
@@ -13,76 +13,90 @@ class AntibanTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
         info = QLabel(
             "These settings make the bot behave more like a real player\n"
             "to reduce the chance of being detected and banned."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #89b4fa; padding: 6px;")
+        info.setStyleSheet("color: #89b4fa; padding: 8px; font-size: 11px;")
         layout.addWidget(info)
 
         group = QGroupBox("Anti-Ban Settings")
-        g = QVBoxLayout(group)
+        form = QFormLayout(group)
+        form.setSpacing(10)
+        form.setContentsMargins(12, 20, 12, 12)
 
         self.chk_enabled = QCheckBox("Enable anti-ban features")
         self.chk_enabled.setChecked(True)
-        g.addWidget(self.chk_enabled)
+        form.addRow(self.chk_enabled)
 
         self.chk_camera = QCheckBox("Random camera rotations")
         self.chk_camera.setChecked(True)
-        g.addWidget(self.chk_camera)
+        form.addRow(self.chk_camera)
 
         self.chk_drift = QCheckBox("Random mouse drifts")
         self.chk_drift.setChecked(True)
-        g.addWidget(self.chk_drift)
+        form.addRow(self.chk_drift)
 
         self.chk_pauses = QCheckBox("Random short pauses")
         self.chk_pauses.setChecked(True)
-        g.addWidget(self.chk_pauses)
+        form.addRow(self.chk_pauses)
 
+        # Pause duration row
         pause_row = QHBoxLayout()
-        pause_row.addWidget(QLabel("Pause duration (sec):"))
         self.pause_min = QSpinBox()
         self.pause_min.setRange(1, 60)
         self.pause_min.setValue(3)
+        self.pause_min.setSuffix(" sec")
+        self.pause_min.setMaximumWidth(90)
         pause_row.addWidget(self.pause_min)
         pause_row.addWidget(QLabel("to"))
         self.pause_max = QSpinBox()
         self.pause_max.setRange(1, 120)
         self.pause_max.setValue(30)
+        self.pause_max.setSuffix(" sec")
+        self.pause_max.setMaximumWidth(90)
         pause_row.addWidget(self.pause_max)
         pause_row.addStretch()
-        g.addLayout(pause_row)
+        form.addRow("Pause duration:", pause_row)
 
         self.chk_afk = QCheckBox("Occasional AFK breaks (walk away from keyboard)")
         self.chk_afk.setChecked(True)
-        g.addWidget(self.chk_afk)
+        form.addRow(self.chk_afk)
 
+        # AFK duration row
         afk_row = QHBoxLayout()
-        afk_row.addWidget(QLabel("AFK duration (sec):"))
         self.afk_min = QSpinBox()
         self.afk_min.setRange(10, 600)
         self.afk_min.setValue(30)
+        self.afk_min.setSuffix(" sec")
+        self.afk_min.setMaximumWidth(90)
         afk_row.addWidget(self.afk_min)
         afk_row.addWidget(QLabel("to"))
         self.afk_max = QSpinBox()
         self.afk_max.setRange(10, 600)
         self.afk_max.setValue(180)
+        self.afk_max.setSuffix(" sec")
+        self.afk_max.setMaximumWidth(90)
         afk_row.addWidget(self.afk_max)
         afk_row.addStretch()
-        g.addLayout(afk_row)
+        form.addRow("AFK duration:", afk_row)
 
+        # AFK chance
         chance_row = QHBoxLayout()
-        chance_row.addWidget(QLabel("AFK chance:"))
         self.afk_chance = QSlider(Qt.Horizontal)
         self.afk_chance.setRange(1, 25)
         self.afk_chance.setValue(5)
+        self.afk_chance.setMaximumWidth(200)
         self.afk_label = QLabel("5%")
+        self.afk_label.setMinimumWidth(35)
         self.afk_chance.valueChanged.connect(lambda v: self.afk_label.setText(f"{v}%"))
         chance_row.addWidget(self.afk_chance)
         chance_row.addWidget(self.afk_label)
-        g.addLayout(chance_row)
+        chance_row.addStretch()
+        form.addRow("AFK chance:", chance_row)
 
         layout.addWidget(group)
         layout.addStretch()

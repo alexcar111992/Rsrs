@@ -107,6 +107,34 @@ ITEM_ACTIONS = [
     "Use on object",
 ]
 
+# ── Skilling types (dropdown choices) ─────────────────────────────────────────
+
+SKILLING_TYPES = [
+    "Mining (Rocks)",
+    "Woodcutting (Trees)",
+    "Fishing (Fishing spot)",
+    "Thieving (Stalls)",
+    "Cooking (Range / Fire)",
+    "Smithing (Anvil / Furnace)",
+    "Crafting (Spinning wheel / Pottery)",
+    "Herblore (Clean / Mix)",
+    "Fletching (Knife + Logs)",
+    "Firemaking (Tinderbox + Logs)",
+    "Runecrafting (Altar)",
+    "Custom (click object)",
+]
+
+# What to do when inventory is full during skilling
+INVENTORY_FULL_ACTIONS = [
+    "Type ::empty (empties inventory)",
+    "Type ::bank (opens bank)",
+    "Drop all items",
+    "Drop specific items",
+    "Bank at nearest banker",
+    "Stop skilling",
+    "Do nothing (wait)",
+]
+
 
 # ── Dataclasses ───────────────────────────────────────────────────────────────
 
@@ -197,6 +225,24 @@ class AntibanSettings:
 
 
 @dataclass
+class SkillingSettings:
+    """Skilling configuration - for stationary skilling activities."""
+    enabled: bool = False
+    skill_type: str = "Mining (Rocks)"         # Dropdown: what skill
+    object_name: str = ""                      # User types: e.g. "Iron rock", "Yew tree"
+    object_action: str = "Left-click"          # Dropdown: Left-click or Right-click > option
+    right_click_option: str = ""               # If right-click, what option text
+    click_same_spot: bool = True               # Stay in place and re-click same spot
+    re_click_delay_ms: int = 1000              # How long to wait before re-clicking
+    wait_for_animation: bool = True            # Wait for idle before re-clicking
+    inventory_full_action: str = "Type ::empty (empties inventory)"  # Dropdown
+    drop_item_names: List[str] = field(default_factory=list)  # Items to drop if using "Drop specific"
+    custom_command: str = ""                   # Custom ::command to type (e.g. ::empty, ::bank)
+    use_item_on_object: bool = False           # E.g. knife on logs, tinderbox on logs
+    use_item_slot: int = 1                     # Which inventory slot has the tool/item
+
+
+@dataclass
 class CalibrationData:
     """Stores calibration results for custom layouts."""
     layout_name: str = "317 / OSRS Fixed"
@@ -220,6 +266,7 @@ class BotProfile:
     login: LoginSettings = field(default_factory=LoginSettings)
     mouse: MouseSettings = field(default_factory=MouseSettings)
     combat: CombatSettings = field(default_factory=CombatSettings)
+    skilling: SkillingSettings = field(default_factory=SkillingSettings)
     antiban: AntibanSettings = field(default_factory=AntibanSettings)
     calibration: CalibrationData = field(default_factory=CalibrationData)
 
@@ -263,6 +310,8 @@ class BotProfile:
             profile.mouse = MouseSettings(**data["mouse"])
         if "combat" in data:
             profile.combat = CombatSettings(**data["combat"])
+        if "skilling" in data:
+            profile.skilling = SkillingSettings(**data["skilling"])
         if "antiban" in data:
             profile.antiban = AntibanSettings(**data["antiban"])
         if "calibration" in data:

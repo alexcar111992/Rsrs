@@ -1,7 +1,7 @@
 """Inventory tab - user configures what to click and when."""
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
     QLineEdit, QSpinBox, QComboBox, QCheckBox, QPushButton,
     QScrollArea, QFrame,
 )
@@ -22,40 +22,53 @@ class InvActionRow(QFrame):
     def __init__(self, index: int = 1):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(4, 4, 4, 4)
 
+        # Two rows instead of one cramped line
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(8, 6, 8, 6)
+        outer.setSpacing(4)
+
+        # Row 1: Enable + Slot + Item name
+        row1 = QHBoxLayout()
         self.chk_enabled = QCheckBox()
         self.chk_enabled.setChecked(True)
-        lay.addWidget(self.chk_enabled)
-
-        lay.addWidget(QLabel("Slot:"))
+        row1.addWidget(self.chk_enabled)
+        row1.addWidget(QLabel("Slot:"))
         self.slot_spin = QSpinBox()
         self.slot_spin.setRange(1, 28)
         self.slot_spin.setValue(index)
-        lay.addWidget(self.slot_spin)
-
-        lay.addWidget(QLabel("Item:"))
+        self.slot_spin.setMaximumWidth(60)
+        row1.addWidget(self.slot_spin)
+        row1.addSpacing(10)
+        row1.addWidget(QLabel("Item:"))
         self.item_edit = QLineEdit()
-        self.item_edit.setPlaceholderText("e.g. Shark, Super str pot...")
-        self.item_edit.setMinimumWidth(120)
-        lay.addWidget(self.item_edit, 1)
+        self.item_edit.setPlaceholderText("e.g. Shark, Super str pot, Bones...")
+        row1.addWidget(self.item_edit, 1)
+        outer.addLayout(row1)
 
-        lay.addWidget(QLabel("Action:"))
+        # Row 2: Action + Trigger + Value
+        row2 = QHBoxLayout()
+        row2.addSpacing(26)
+        row2.addWidget(QLabel("Action:"))
         self.action_combo = QComboBox()
         self.action_combo.addItems(ITEM_ACTIONS)
-        lay.addWidget(self.action_combo)
-
-        lay.addWidget(QLabel("When:"))
+        self.action_combo.setMinimumWidth(180)
+        row2.addWidget(self.action_combo)
+        row2.addSpacing(10)
+        row2.addWidget(QLabel("When:"))
         self.trigger_combo = QComboBox()
         self.trigger_combo.addItems(TRIGGERS)
-        lay.addWidget(self.trigger_combo)
-
-        lay.addWidget(QLabel("Value:"))
+        self.trigger_combo.setMinimumWidth(160)
+        row2.addWidget(self.trigger_combo)
+        row2.addSpacing(10)
+        row2.addWidget(QLabel("Value:"))
         self.value_spin = QSpinBox()
         self.value_spin.setRange(1, 10000)
         self.value_spin.setValue(50)
-        lay.addWidget(self.value_spin)
+        self.value_spin.setMaximumWidth(80)
+        row2.addWidget(self.value_spin)
+        row2.addStretch()
+        outer.addLayout(row2)
 
     def get_action(self) -> InventorySlotAction:
         return InventorySlotAction(
@@ -84,13 +97,14 @@ class InventoryTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
 
         info = QLabel(
             "Configure what items are in your inventory and when to click them.\n"
-            "Example: Slot 25 = Shark, Action = Left-click (Eat), When HP below 50%"
+            "Example: Slot 25 = Shark, Action = Left-click (Eat), When = HP below 50%"
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #89b4fa; padding: 6px;")
+        info.setStyleSheet("color: #89b4fa; padding: 8px; font-size: 11px;")
         layout.addWidget(info)
 
         group = QGroupBox("Inventory Slot Actions")
@@ -100,6 +114,7 @@ class InventoryTab(QWidget):
         scroll.setWidgetResizable(True)
         scroll_widget = QWidget()
         self.rows_layout = QVBoxLayout(scroll_widget)
+        self.rows_layout.setSpacing(4)
         scroll.setWidget(scroll_widget)
         g_lay.addWidget(scroll)
 

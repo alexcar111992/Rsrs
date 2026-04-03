@@ -1,8 +1,8 @@
 """Mouse Mode tab - real mouse vs ghost mouse."""
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
-    QComboBox, QCheckBox, QSlider,
+    QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel,
+    QComboBox, QCheckBox, QSlider, QHBoxLayout,
 )
 from PyQt5.QtCore import Qt
 
@@ -13,53 +13,51 @@ class MouseTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
         info = QLabel(
-            "REAL MOUSE: Moves your actual cursor. Only 1 client at a time.\n"
+            "REAL MOUSE: Moves your actual cursor. Only 1 client at a time.\n\n"
             "GHOST MOUSE: Sends clicks directly to the game window.\n"
-            "   You keep your mouse free! Run multiple clients at once."
+            "You keep your mouse free! Run multiple clients at once."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #89b4fa; padding: 6px;")
+        info.setStyleSheet("color: #89b4fa; padding: 8px; font-size: 11px;")
         layout.addWidget(info)
 
         group = QGroupBox("Mouse Settings")
-        g = QVBoxLayout(group)
+        form = QFormLayout(group)
+        form.setSpacing(12)
+        form.setContentsMargins(12, 20, 12, 12)
 
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Mouse Mode:"))
         self.mode_combo = QComboBox()
         self.mode_combo.addItems(["Ghost Mouse", "Real Mouse"])
-        self.mode_combo.setMinimumWidth(200)
-        row1.addWidget(self.mode_combo)
-        row1.addStretch()
-        g.addLayout(row1)
+        self.mode_combo.setMaximumWidth(250)
+        form.addRow("Mouse Mode:", self.mode_combo)
 
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Speed:"))
         self.speed_combo = QComboBox()
         self.speed_combo.addItems(["Slow", "Normal", "Fast", "Instant"])
         self.speed_combo.setCurrentIndex(1)
-        row2.addWidget(self.speed_combo)
-        row2.addStretch()
-        g.addLayout(row2)
+        self.speed_combo.setMaximumWidth(250)
+        form.addRow("Speed:", self.speed_combo)
 
         self.chk_humanize = QCheckBox("Humanize mouse movement (random curves, slight delays)")
         self.chk_humanize.setChecked(True)
-        g.addWidget(self.chk_humanize)
+        form.addRow(self.chk_humanize)
 
-        row3 = QHBoxLayout()
-        row3.addWidget(QLabel("Misclick chance:"))
+        misclick_row = QHBoxLayout()
         self.misclick_slider = QSlider(Qt.Horizontal)
         self.misclick_slider.setRange(0, 100)
         self.misclick_slider.setValue(2)
+        self.misclick_slider.setMaximumWidth(200)
         self.misclick_label = QLabel("2%")
+        self.misclick_label.setMinimumWidth(35)
         self.misclick_slider.valueChanged.connect(
             lambda v: self.misclick_label.setText(f"{v}%")
         )
-        row3.addWidget(self.misclick_slider)
-        row3.addWidget(self.misclick_label)
-        g.addLayout(row3)
+        misclick_row.addWidget(self.misclick_slider)
+        misclick_row.addWidget(self.misclick_label)
+        misclick_row.addStretch()
+        form.addRow("Misclick chance:", misclick_row)
 
         layout.addWidget(group)
         layout.addStretch()

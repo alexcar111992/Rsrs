@@ -13,7 +13,8 @@ class LootRuleRow(QFrame):
         super().__init__()
         self.setFrameShape(QFrame.StyledPanel)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setContentsMargins(8, 6, 8, 6)
+        lay.setSpacing(10)
 
         self.chk_pickup = QCheckBox("Pick up")
         self.chk_pickup.setChecked(True)
@@ -21,14 +22,15 @@ class LootRuleRow(QFrame):
 
         lay.addWidget(QLabel("Item name:"))
         self.name_edit = QLineEdit()
-        self.name_edit.setPlaceholderText("e.g. Dragon bones, Rune scimitar...")
-        self.name_edit.setMinimumWidth(200)
+        self.name_edit.setPlaceholderText("e.g. Dragon bones, Rune scimitar, Coins...")
         lay.addWidget(self.name_edit, 1)
 
+        lay.addSpacing(10)
         lay.addWidget(QLabel("Priority:"))
         self.priority_spin = QSpinBox()
         self.priority_spin.setRange(1, 10)
         self.priority_spin.setValue(index)
+        self.priority_spin.setMaximumWidth(60)
         lay.addWidget(self.priority_spin)
 
     def get_rule(self) -> LootRule:
@@ -48,16 +50,18 @@ class LootTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
 
         info = QLabel(
             "Add items you want to pick up after killing NPCs.\n"
             "Leave empty and check 'Pick up all' to grab everything."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #89b4fa; padding: 6px;")
+        info.setStyleSheet("color: #89b4fa; padding: 8px; font-size: 11px;")
         layout.addWidget(info)
 
         self.chk_pickup_all = QCheckBox("Pick up ALL ground items (ignore list below)")
+        self.chk_pickup_all.setStyleSheet("font-size: 12px; padding: 4px;")
         layout.addWidget(self.chk_pickup_all)
 
         group = QGroupBox("Loot List (items to pick up)")
@@ -67,6 +71,7 @@ class LootTab(QWidget):
         scroll.setWidgetResizable(True)
         scroll_widget = QWidget()
         self.rows_layout = QVBoxLayout(scroll_widget)
+        self.rows_layout.setSpacing(4)
         scroll.setWidget(scroll_widget)
         g_lay.addWidget(scroll)
 

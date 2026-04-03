@@ -3,8 +3,8 @@
 Runs the main loop:
   1. Capture game window screenshot
   2. Detect game state (login screen, in-game, disconnected, etc.)
-  3. If not in-game → auto-login
-  4. If in-game → run combat, inventory, loot, anti-ban
+  3. If not in-game -> auto-login
+  4. If in-game -> run skilling OR combat, inventory, loot, anti-ban
   5. Report status to GUI
 
 Everything is driven by the BotProfile the user configured in the GUI.
@@ -27,6 +27,7 @@ from .loot_system import LootSystem
 from .inventory_manager import InventoryManager
 from .login_system import LoginSystem
 from .antiban import AntibanSystem
+from .skilling_system import SkillingSystem
 
 
 class BotEngine:
@@ -41,6 +42,7 @@ class BotEngine:
         self.inventory = InventoryManager(self.mouse, self.detector)
         self.login = LoginSystem(self.mouse, self.detector)
         self.antiban = AntibanSystem(self.mouse)
+        self.skilling = SkillingSystem(self.mouse, self.detector)
 
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -51,7 +53,7 @@ class BotEngine:
         self._tick_delay = 0.3  # seconds between ticks
         self._last_snapshot: Optional[InterfaceSnapshot] = None
 
-        # Callback to push status updates to the GUI
+        # Callbacks to push updates to the GUI
         self.on_status_update: Optional[Callable[[str], None]] = None
         self.on_stats_update: Optional[Callable[[CombatStats], None]] = None
         self.on_snapshot_update: Optional[Callable[[InterfaceSnapshot], None]] = None
@@ -112,6 +114,9 @@ class BotEngine:
         # Login
         self.login.configure(profile.login)
 
+        # Skilling
+        self.skilling.configure(profile.skilling)
+
         # Anti-ban
         self.antiban.configure(profile.antiban)
 
@@ -145,6 +150,7 @@ class BotEngine:
         self.inventory.reset()
         self.login.reset()
         self.antiban.reset()
+        self.skilling.reset()
 
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -167,6 +173,7 @@ class BotEngine:
     def _run_loop(self):
         """Main bot loop - runs in background thread."""
         self._set_status("Running...")
+        skilling_mode = self._profile and self._profile.skilling.enabled
 
         while self._running:
             try:
@@ -213,8 +220,16 @@ class BotEngine:
                     if self.antiban.is_afk:
                         continue
 
+                # ── SKILLING MODE ──
+                if skilling_mode:
+                    msg = self.skilling.tick(image, snap)
+                    if msg:
+                        self._set_status(f"[Skilling] {msg}")
+                    time.sleep(self._tick_delay)
+                    continue
+
+                # ── COMBAT MODE ──
                 # 5. Inventory management (eat, drink, etc.)
-                # Skip if Simple Mode is on (user doesn't need food/inventory)
                 if not self._profile.combat.simple_mode:
                     inv_msg = self.inventory.tick(image, snap)
                     if inv_msg:
@@ -222,7 +237,7 @@ class BotEngine:
                         time.sleep(self._tick_delay)
                         continue
 
-                # 6. Loot pickup (if items on ground and configured)
+                # 6. Loot pickup
                 if self.loot.has_items_to_loot(snap) and self._profile.combat.loot_after_kill:
                     msg = self.loot.pickup(image, snap)
                     self._set_status(f"[Loot] {msg}")
@@ -252,10 +267,8 @@ class BotEngine:
             return None
 
         if self.mouse.mode == "ghost":
-            # Ghost mode: capture using PrintWindow (works in background)
             return self.capture.capture_window(self._window)
         else:
-            # Real mode: capture screen region
             return self.capture.capture_full_window_region(self._window)
 
     def _set_status(self, msg: str):

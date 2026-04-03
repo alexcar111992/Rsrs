@@ -1,7 +1,7 @@
 """Login tab - auto-login configuration."""
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
+    QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel,
     QLineEdit, QSpinBox, QCheckBox,
 )
 
@@ -12,56 +12,54 @@ class LoginTab(QWidget):
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
+        layout.setSpacing(10)
 
         info = QLabel(
             "If the bot detects you've been logged out or disconnected,\n"
             "it will automatically log back in using these credentials."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #89b4fa; padding: 6px;")
+        info.setStyleSheet("color: #89b4fa; padding: 8px; font-size: 11px;")
         layout.addWidget(info)
 
         group = QGroupBox("Auto-Login Settings")
-        g = QVBoxLayout(group)
+        form = QFormLayout(group)
+        form.setSpacing(12)
+        form.setContentsMargins(12, 20, 12, 12)
 
         self.chk_enabled = QCheckBox("Enable auto-login")
         self.chk_enabled.setChecked(True)
-        g.addWidget(self.chk_enabled)
+        form.addRow(self.chk_enabled)
 
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Username:"))
         self.username_edit = QLineEdit()
         self.username_edit.setPlaceholderText("Your RSPS username")
-        row1.addWidget(self.username_edit, 1)
-        g.addLayout(row1)
+        self.username_edit.setMaximumWidth(300)
+        form.addRow("Username:", self.username_edit)
 
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Password:"))
         self.password_edit = QLineEdit()
         self.password_edit.setEchoMode(QLineEdit.Password)
         self.password_edit.setPlaceholderText("Your RSPS password")
-        row2.addWidget(self.password_edit, 1)
-        g.addLayout(row2)
+        self.password_edit.setMaximumWidth(300)
+        form.addRow("Password:", self.password_edit)
 
-        row3 = QHBoxLayout()
-        row3.addWidget(QLabel("World:"))
         self.world_spin = QSpinBox()
         self.world_spin.setRange(1, 200)
         self.world_spin.setValue(1)
-        row3.addWidget(self.world_spin)
-        row3.addStretch()
-        row3.addWidget(QLabel("Retry delay (sec):"))
+        self.world_spin.setMaximumWidth(100)
+        form.addRow("World:", self.world_spin)
+
         self.delay_spin = QSpinBox()
         self.delay_spin.setRange(1, 300)
         self.delay_spin.setValue(10)
-        row3.addWidget(self.delay_spin)
-        row3.addStretch()
-        row3.addWidget(QLabel("Max retries:"))
+        self.delay_spin.setSuffix(" sec")
+        self.delay_spin.setMaximumWidth(100)
+        form.addRow("Retry delay:", self.delay_spin)
+
         self.retries_spin = QSpinBox()
         self.retries_spin.setRange(1, 100)
         self.retries_spin.setValue(10)
-        row3.addWidget(self.retries_spin)
-        g.addLayout(row3)
+        self.retries_spin.setMaximumWidth(100)
+        form.addRow("Max retries:", self.retries_spin)
 
         layout.addWidget(group)
         layout.addStretch()
