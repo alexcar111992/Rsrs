@@ -131,6 +131,14 @@ class MainWindow(QMainWindow):
         # Simple mode toggles
         self.chk_simple_mode.toggled.connect(self._on_simple_mode_toggled)
 
+        # Per-tab Start / Stop signals
+        self.tab_combat.start_requested.connect(lambda: self._start_mode("combat"))
+        self.tab_combat.stop_requested.connect(self._stop)
+        self.tab_skilling.start_requested.connect(lambda: self._start_mode("skilling"))
+        self.tab_skilling.stop_requested.connect(self._stop)
+        self.tab_easter.start_requested.connect(lambda: self._start_mode("easter"))
+        self.tab_easter.stop_requested.connect(self._stop)
+
         # ── Live Stats ────────────────────────────────────────────────
         stats_box = QGroupBox("Live Stats")
         stats_lay = QHBoxLayout(stats_box)
@@ -263,6 +271,11 @@ class MainWindow(QMainWindow):
         return p
 
     def _start(self):
+        """Start with auto mode (uses enabled flags from profile)."""
+        self._start_mode(None)
+
+    def _start_mode(self, mode):
+        """Start the bot in a specific mode: 'combat', 'skilling', 'easter', or None (auto)."""
         text = self.window_combo.currentText().strip()
         if not text:
             QMessageBox.warning(self, "No Window",
@@ -278,7 +291,10 @@ class MainWindow(QMainWindow):
         self.status_bar.showMessage(f"Attached to: {window.title} ({window.width}x{window.height})")
         profile = self._collect_profile()
         self.engine.apply_profile(profile)
+        self.engine.set_run_mode(mode)
         self.engine.start()
+        if mode:
+            self.status_bar.showMessage(f"Started: {mode.title()} mode")
 
     def _pause(self):
         self.engine.pause()

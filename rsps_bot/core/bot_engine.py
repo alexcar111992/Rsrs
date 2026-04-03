@@ -54,6 +54,7 @@ class BotEngine:
         self._profile: Optional[BotProfile] = None
         self._tick_delay = 0.3  # seconds between ticks
         self._last_snapshot: Optional[InterfaceSnapshot] = None
+        self._run_mode: Optional[str] = None  # "combat", "skilling", "easter", or None (auto)
 
         # Callbacks to push updates to the GUI
         self.on_status_update: Optional[Callable[[str], None]] = None
@@ -137,6 +138,10 @@ class BotEngine:
         """Find game client windows."""
         return self.capture.find_windows(title_pattern)
 
+    def set_run_mode(self, mode: Optional[str]):
+        """Set which mode to run: 'combat', 'skilling', 'easter', or None for auto."""
+        self._run_mode = mode
+
     def start(self):
         """Start the bot in a background thread."""
         if self._running:
@@ -179,8 +184,20 @@ class BotEngine:
     def _run_loop(self):
         """Main bot loop - runs in background thread."""
         self._set_status("Running...")
-        easter_mode = self._profile and self._profile.easter_event.enabled
-        skilling_mode = self._profile and self._profile.skilling.enabled
+        # Explicit mode from per-tab Start button, or fall back to enabled flags
+        if self._run_mode == "easter":
+            easter_mode = True
+            skilling_mode = False
+        elif self._run_mode == "skilling":
+            easter_mode = False
+            skilling_mode = True
+        elif self._run_mode == "combat":
+            easter_mode = False
+            skilling_mode = False
+        else:
+            # Auto: check enabled flags (legacy main Start button)
+            easter_mode = self._profile and self._profile.easter_event.enabled
+            skilling_mode = self._profile and self._profile.skilling.enabled
 
         while self._running:
             try:

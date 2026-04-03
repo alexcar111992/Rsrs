@@ -13,13 +13,17 @@ Full workflow configured through simple checkboxes and slot numbers:
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel,
     QLineEdit, QSpinBox, QCheckBox, QScrollArea, QSlider, QHBoxLayout,
+    QPushButton,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 
 from rsps_bot.core.config import EasterEventSettings
 
 
 class EasterEventTab(QWidget):
+    start_requested = pyqtSignal()
+    stop_requested = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         outer = QVBoxLayout(self)
@@ -187,6 +191,19 @@ class EasterEventTab(QWidget):
         timing_form = QFormLayout()
         timing_form.addRow("Delay between kills:", self.cycle_delay_spin)
         layout.addLayout(timing_form)
+
+        # ── Per-tab Start / Stop ──────────────────────────────────────
+        tab_btn_row = QHBoxLayout()
+        self.btn_start = QPushButton("  START Easter Event  ")
+        self.btn_start.setStyleSheet("background:#2a7a2a; color:white; font-size:12px; font-weight:bold; padding:7px 18px;")
+        self.btn_start.clicked.connect(self.start_requested.emit)
+        self.btn_stop = QPushButton("  STOP Easter Event  ")
+        self.btn_stop.setStyleSheet("background:#a02020; color:white; font-size:12px; font-weight:bold; padding:7px 18px;")
+        self.btn_stop.clicked.connect(self.stop_requested.emit)
+        tab_btn_row.addWidget(self.btn_start)
+        tab_btn_row.addWidget(self.btn_stop)
+        tab_btn_row.addStretch()
+        layout.addLayout(tab_btn_row)
 
         layout.addStretch()
         scroll.setWidget(inner)

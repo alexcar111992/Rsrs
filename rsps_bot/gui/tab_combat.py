@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QSpinBox, QComboBox, QCheckBox, QPushButton,
     QSlider, QScrollArea, QFrame,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, pyqtSignal
 
 from rsps_bot.core.config import NpcTarget, CombatSettings, NPC_ACTIONS
 
@@ -80,6 +80,9 @@ class NpcTargetRow(QFrame):
 
 
 class CombatTab(QWidget):
+    start_requested = pyqtSignal()
+    stop_requested = pyqtSignal()
+
     def __init__(self):
         super().__init__()
         layout = QVBoxLayout(self)
@@ -192,6 +195,19 @@ class CombatTab(QWidget):
         sg.addLayout(extra_box)
 
         layout.addWidget(settings_group)
+
+        # ── Per-tab Start / Stop ──────────────────────────────────────
+        tab_btn_row = QHBoxLayout()
+        self.btn_start = QPushButton("  START Combat  ")
+        self.btn_start.setStyleSheet("background:#2a7a2a; color:white; font-size:12px; font-weight:bold; padding:7px 18px;")
+        self.btn_start.clicked.connect(self.start_requested.emit)
+        self.btn_stop = QPushButton("  STOP Combat  ")
+        self.btn_stop.setStyleSheet("background:#a02020; color:white; font-size:12px; font-weight:bold; padding:7px 18px;")
+        self.btn_stop.clicked.connect(self.stop_requested.emit)
+        tab_btn_row.addWidget(self.btn_start)
+        tab_btn_row.addWidget(self.btn_stop)
+        tab_btn_row.addStretch()
+        layout.addLayout(tab_btn_row)
 
     def _add_target_row(self):
         row = NpcTargetRow(len(self.target_rows) + 1)
