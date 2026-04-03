@@ -163,6 +163,7 @@ class MouseSettings:
 @dataclass
 class CombatSettings:
     """Combat behavior settings."""
+    simple_mode: bool = False              # Checkbox: just attack+loot, no food/inventory
     eat_food: bool = True                  # Checkbox
     eat_at_hp_percent: int = 50            # Slider / spinner
     food_slots: List[int] = field(default_factory=lambda: [25, 26, 27, 28])
@@ -210,6 +211,7 @@ class BotProfile:
     """Complete bot profile - everything the user configured in the GUI."""
     name: str = "Default"
     window_title: str = ""                 # Text field - game window title to look for
+    client_jar_path: str = ""              # File path to .jar client (e.g. Launcher Retro.jar)
     layout: str = "317 / OSRS Fixed"       # Dropdown
 
     npc_targets: List[NpcTarget] = field(default_factory=lambda: [NpcTarget()])

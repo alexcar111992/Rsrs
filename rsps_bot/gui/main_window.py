@@ -1,11 +1,12 @@
 """Main GUI window - ties all tabs together."""
 
+import subprocess
 import sys
 import os
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLabel, QStatusBar, QMessageBox,
-    QFileDialog, QComboBox, QGroupBox,
+    QFileDialog, QComboBox, QGroupBox, QLineEdit, QCheckBox,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QFont
@@ -31,10 +32,11 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RSPS Bot Client v1.0 - No Scripts Needed")
-        self.setMinimumSize(750, 620)
+        self.setMinimumSize(780, 680)
 
         self.engine = BotEngine()
         self.profile = BotProfile()
+        self._windows = []
         self.bridge = StatusBridge()
         self.bridge.status_signal.connect(self._on_status)
         self.bridge.stats_signal.connect(self._on_stats)
@@ -56,23 +58,61 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
 
-        # Top bar: window selection + layout
-        top = QGroupBox("Game Window")
-        top_lay = QHBoxLayout(top)
-        top_lay.addWidget(QLabel("Window:"))
+        # ── Game Client Section ───────────────────────────────────────
+        client_group = QGroupBox("Game Client")
+        client_lay = QVBoxLayout(client_group)
+
+        # Row 1: Client .jar path - browse or type your own
+        jar_row = QHBoxLayout()
+        jar_row.addWidget(QLabel("Client Path (.jar):"))
+        self.jar_path_edit = QLineEdit()
+        self.jar_path_edit.setPlaceholderText(r"e.g. C:\Users\Conor\Desktop\Launcher Retro.jar")
+        jar_row.addWidget(self.jar_path_edit, 1)
+        btn_browse = QPushButton("Browse...")
+        btn_browse.clicked.connect(self._browse_jar)
+        jar_row.addWidget(btn_browse)
+        btn_launch = QPushButton("Launch Client")
+        btn_launch.setStyleSheet("background:#1a6b1a;color:white;")
+        btn_launch.clicked.connect(self._launch_client)
+        jar_row.addWidget(btn_launch)
+        client_lay.addLayout(jar_row)
+
+        # Row 2: Window selection - auto-detected OR type custom title
+        win_row = QHBoxLayout()
+        win_row.addWidget(QLabel("Game Window:"))
         self.window_combo = QComboBox()
-        self.window_combo.setMinimumWidth(250)
-        top_lay.addWidget(self.window_combo, 1)
+        self.window_combo.setEditable(True)  # User can type custom window title
+        self.window_combo.setMinimumWidth(280)
+        self.window_combo.lineEdit().setPlaceholderText("Select detected window or type window title...")
+        win_row.addWidget(self.window_combo, 1)
         btn_refresh = QPushButton("Refresh")
         btn_refresh.clicked.connect(self._refresh_windows)
-        top_lay.addWidget(btn_refresh)
-        top_lay.addWidget(QLabel("Layout:"))
+        win_row.addWidget(btn_refresh)
+        client_lay.addLayout(win_row)
+
+        # Row 3: Layout + Simple Mode
+        opt_row = QHBoxLayout()
+        opt_row.addWidget(QLabel("Layout:"))
         self.layout_combo = QComboBox()
         self.layout_combo.addItems(LAYOUT_PRESETS.keys())
-        top_lay.addWidget(self.layout_combo)
-        root.addWidget(top)
+        opt_row.addWidget(self.layout_combo)
+        opt_row.addSpacing(20)
 
-        # Tabs
+        # SIMPLE MODE - the big feature for easy fights
+        self.chk_simple_mode = QCheckBox("SIMPLE MODE (just attack + loot, no food/inventory needed)")
+        self.chk_simple_mode.setStyleSheet("color: #a6e3a1; font-weight: bold;")
+        self.chk_simple_mode.setToolTip(
+            "Turn this ON when fighting NPCs you'll never die to.\n"
+            "The bot will only attack and pick up loot.\n"
+            "No food, no potions, no inventory management needed."
+        )
+        opt_row.addWidget(self.chk_simple_mode)
+        opt_row.addStretch()
+        client_lay.addLayout(opt_row)
+
+        root.addWidget(client_group)
+
+        # ── Tabs ──────────────────────────────────────────────────────
         self.tabs = QTabWidget()
         self.tab_combat = CombatTab()
         self.tab_inventory = InventoryTab()
@@ -89,7 +129,10 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_antiban, "Anti-Ban")
         root.addWidget(self.tabs, 1)
 
-        # Stats bar
+        # Grey out inventory tab when simple mode is on
+        self.chk_simple_mode.toggled.connect(self._on_simple_mode_toggled)
+
+        # ── Stats bar ─────────────────────────────────────────────────
         stats_box = QGroupBox("Live Stats")
         stats_lay = QHBoxLayout(stats_box)
         self.lbl_kills = QLabel("Kills: 0")
@@ -102,7 +145,7 @@ class MainWindow(QMainWindow):
             stats_lay.addWidget(lbl)
         root.addWidget(stats_box)
 
-        # Control buttons
+        # ── Control buttons ───────────────────────────────────────────
         btn_row = QHBoxLayout()
         self.btn_start = QPushButton("START (F5)")
         self.btn_start.setStyleSheet("background:#2a7a2a;color:white;font-size:14px;padding:8px;")
@@ -128,47 +171,130 @@ class MainWindow(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready - Configure your settings and press START")
+        self.status_bar.showMessage("Ready - Select your game client, configure settings, press START")
 
     # ── Actions ───────────────────────────────────────────────────────
 
+    def _browse_jar(self):
+        """Open file browser to pick a .jar client file."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select RSPS Client",
+            os.path.expanduser("~\\Desktop"),
+            "Java Files (*.jar);;All Files (*)",
+        )
+        if path:
+            self.jar_path_edit.setText(path)
+            self.status_bar.showMessage(f"Client path set: {path}")
+
+    def _launch_client(self):
+        """Launch the .jar client file."""
+        path = self.jar_path_edit.text().strip()
+        if not path:
+            QMessageBox.warning(self, "No Path", "Enter or browse for a .jar client file first!")
+            return
+        if not os.path.isfile(path):
+            QMessageBox.warning(self, "File Not Found", f"File not found:\n{path}")
+            return
+
+        try:
+            # Launch the .jar with Java
+            subprocess.Popen(["java", "-jar", path], cwd=os.path.dirname(path))
+            self.status_bar.showMessage(f"Launching: {os.path.basename(path)} ... wait a few seconds then click Refresh")
+        except FileNotFoundError:
+            # Java not found, try javaw or direct execution
+            try:
+                subprocess.Popen(["javaw", "-jar", path], cwd=os.path.dirname(path))
+                self.status_bar.showMessage(f"Launching: {os.path.basename(path)}")
+            except FileNotFoundError:
+                QMessageBox.critical(
+                    self, "Java Not Found",
+                    "Java is not installed or not in PATH.\n"
+                    "Install Java from https://adoptium.net/ or https://java.com"
+                )
+        except Exception as e:
+            QMessageBox.critical(self, "Launch Error", f"Failed to launch client:\n{e}")
+
+    def _on_simple_mode_toggled(self, checked: bool):
+        """When Simple Mode is toggled, disable/enable inventory tab."""
+        self.tab_inventory.setEnabled(not checked)
+        # Also visually indicate
+        idx = self.tabs.indexOf(self.tab_inventory)
+        if checked:
+            self.tabs.setTabText(idx, "Inventory (disabled - Simple Mode)")
+            self.status_bar.showMessage("Simple Mode ON - just attack, loot, repeat. No food/inventory needed.")
+        else:
+            self.tabs.setTabText(idx, "Inventory")
+
     def _refresh_windows(self):
-        current_text = self.window_combo.currentText()
+        """Refresh the window list, keeping any custom text the user typed."""
+        custom_text = self.window_combo.currentText()
         self.window_combo.clear()
+        self._windows = []
+
         windows = self.engine.find_game_windows()
         self._windows = windows
         for w in windows:
-            self.window_combo.addItem(f"{w.title} ({w.width}x{w.height})", w)
-        # Restore selection
-        for i in range(self.window_combo.count()):
-            if self.window_combo.itemText(i) == current_text:
-                self.window_combo.setCurrentIndex(i)
-                break
+            self.window_combo.addItem(f"{w.title} ({w.width}x{w.height})")
+
+        # Restore what user had selected/typed
+        if custom_text:
+            idx = self.window_combo.findText(custom_text)
+            if idx >= 0:
+                self.window_combo.setCurrentIndex(idx)
+            else:
+                # User typed a custom title - keep it
+                self.window_combo.setEditText(custom_text)
+
+    def _find_window_by_text(self, text: str):
+        """Find a window matching the combo box text (exact match or title search)."""
+        # First check if it matches one of our detected windows
+        for w in self._windows:
+            display = f"{w.title} ({w.width}x{w.height})"
+            if display == text:
+                return w
+
+        # Otherwise treat it as a title search (user typed custom text)
+        if text.strip():
+            matches = self.engine.find_game_windows(text.strip())
+            if matches:
+                return matches[0]
+
+        return None
 
     def _collect_profile(self) -> BotProfile:
         """Read all GUI fields into a BotProfile."""
         p = BotProfile()
         p.layout = self.layout_combo.currentText()
+        p.client_jar_path = self.jar_path_edit.text().strip()
         p.npc_targets = self.tab_combat.get_targets()
         p.combat = self.tab_combat.get_settings()
+        p.combat.simple_mode = self.chk_simple_mode.isChecked()
         p.inventory_actions = self.tab_inventory.get_actions()
         p.loot_rules = self.tab_loot.get_rules()
         p.login = self.tab_login.get_settings()
         p.mouse = self.tab_mouse.get_settings()
         p.antiban = self.tab_antiban.get_settings()
-        # Set calibration layout
         from rsps_bot.core.config import CalibrationData
         p.calibration = CalibrationData(layout_name=p.layout)
         return p
 
     def _start(self):
-        # Get selected window
-        idx = self.window_combo.currentIndex()
-        if idx < 0 or idx >= len(self._windows):
-            QMessageBox.warning(self, "No Window", "Select a game window first!")
+        # Find the game window
+        text = self.window_combo.currentText().strip()
+        if not text:
+            QMessageBox.warning(self, "No Window",
+                "Select a game window from the dropdown, or type the window title!")
             return
-        window = self._windows[idx]
+
+        window = self._find_window_by_text(text)
+        if not window:
+            QMessageBox.warning(self, "Window Not Found",
+                f"Could not find a window matching:\n\"{text}\"\n\n"
+                "Make sure your RSPS client is open, then click Refresh.")
+            return
+
         self.engine.set_window(window)
+        self.status_bar.showMessage(f"Attached to: {window.title} ({window.width}x{window.height})")
 
         # Collect profile from GUI
         profile = self._collect_profile()
@@ -200,7 +326,9 @@ class MainWindow(QMainWindow):
                 self.tab_mouse.load_profile(profile)
                 self.tab_antiban.load_profile(profile)
                 self.layout_combo.setCurrentText(profile.layout)
-                self.status_bar.showMessage(f"Loaded: {profile.name}")
+                self.jar_path_edit.setText(profile.client_jar_path)
+                self.chk_simple_mode.setChecked(profile.combat.simple_mode)
+                self.status_bar.showMessage(f"Loaded profile: {profile.name}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load profile:\n{e}")
 

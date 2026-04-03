@@ -214,11 +214,13 @@ class BotEngine:
                         continue
 
                 # 5. Inventory management (eat, drink, etc.)
-                inv_msg = self.inventory.tick(image, snap)
-                if inv_msg:
-                    self._set_status(f"[Inventory] {inv_msg}")
-                    time.sleep(self._tick_delay)
-                    continue
+                # Skip if Simple Mode is on (user doesn't need food/inventory)
+                if not self._profile.combat.simple_mode:
+                    inv_msg = self.inventory.tick(image, snap)
+                    if inv_msg:
+                        self._set_status(f"[Inventory] {inv_msg}")
+                        time.sleep(self._tick_delay)
+                        continue
 
                 # 6. Loot pickup (if items on ground and configured)
                 if self.loot.has_items_to_loot(snap) and self._profile.combat.loot_after_kill:

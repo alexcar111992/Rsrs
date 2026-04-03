@@ -89,13 +89,14 @@ class CombatSystem:
         if snap.game_state != GameState.IN_GAME:
             return f"Not in game ({snap.game_state.name})"
 
-        # Priority 1: Eat if HP is low
-        if self.settings.eat_food and snap.player_hp_percent <= self.settings.eat_at_hp_percent:
-            if time.time() - self._last_eat_time > 1.8:  # Eat tick cooldown
-                return self._eat_food(snap)
+        # Priority 1: Eat if HP is low (skip in Simple Mode)
+        if not self.settings.simple_mode:
+            if self.settings.eat_food and snap.player_hp_percent <= self.settings.eat_at_hp_percent:
+                if time.time() - self._last_eat_time > 1.8:  # Eat tick cooldown
+                    return self._eat_food(snap)
 
-        # Priority 2: Drink potion if configured
-        if self.settings.use_potions and self.settings.potion_slots:
+        # Priority 2: Drink potion if configured (skip in Simple Mode)
+        if not self.settings.simple_mode and self.settings.use_potions and self.settings.potion_slots:
             # For now, drink when HP is below a threshold (user configured)
             if snap.player_hp_percent <= self.settings.drink_potion_value:
                 return self._drink_potion(snap)
