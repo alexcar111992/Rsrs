@@ -1,21 +1,22 @@
 """Easter Baby Mole event automation - detection based.
 
-Simple loop driven entirely by what the bot can SEE:
-  1. Are prayers on?  No -> click quick prayers orb
-  2. Is there an NPC? (HP bar visible or minimap dot)
-     - Yes + not in combat -> right-click attack it
-     - Yes + in combat     -> wait for kill
-     - No                  -> click spade to spawn one
-  3. Repeat
+Correct workflow:
+  1. Check prayers are on -> toggle quick prayers if not
+  2. Click spade in inventory -> mole spawns and AUTO-ATTACKS the player
+  3. Wait for combat to finish (mole dies from player auto-retaliate)
+  4. Short delay, then click spade again
+  5. Repeat
 
-No looting (necklace auto-banks), no eating/potting (prayers are unlimited).
+IMPORTANT:
+  - The bot NEVER attacks the mole. The mole auto-attacks the player.
+  - The bot ignores other players' moles (filters HP bars by position).
+  - No looting (necklace auto-banks), no eating/potting (unlimited prayers).
 """
 
 import random
 import time
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Optional
 
 import numpy as np
 
@@ -25,12 +26,9 @@ from .mouse_controller import MouseController
 
 
 class EasterState(Enum):
-    IDLE = auto()
-    TURNING_ON_PRAYERS = auto()
-    CLICKING_SPADE = auto()
-    WAITING_FOR_SPAWN = auto()
-    ATTACKING_MOLE = auto()
-    IN_COMBAT = auto()
+    IDLE = auto()                 # Ready to click spade
+    WAITING_FOR_SPAWN = auto()    # Spade clicked, waiting for mole to engage
+    IN_COMBAT = auto()            # Player is fighting their mole
 
 
 @dataclass
@@ -53,7 +51,15 @@ class EasterStats:
 
 
 class EasterEventSystem:
-    """Automates the Easter Baby Mole event using screen detection."""
+    """Automates the Easter Baby Mole event using screen detection.
+
+    Never attacks - the mole auto-attacks the player when spawned.
+    Uses player-specific combat detection to ignore other players' moles.
+    """
+
+    # How close an HP bar must be to viewport center to count as "player's combat"
+    COMBAT_RADIUS_X = 150  # pixels horizontal
+    COMBAT_RADIUS_Y = 120  # pixels vertical (above center - HP bars appear above NPCs)
 
     def __init__(self, mouse: MouseController, detector: InterfaceDetector):
         self.mouse = mouse
@@ -63,9 +69,9 @@ class EasterEventSystem:
         self.stats = EasterStats()
         self.settings = EasterEventSettings()
 
-        self._last_action_time = 0.0
-        self._search_index = 0
-        self._was_in_combat = False  # Track combat -> not combat transition
+        self._spade_click_time = 0.0
+        self._last_kill_time = 0.0
+        self._prayer_check_time = 0.0
 
     def configure(self, settings: EasterEventSettings):
         self.settings = settings
@@ -75,60 +81,96 @@ class EasterEventSystem:
         if not self.settings.enabled:
             return ""
 
-        if snap.game_state != GameState.IN_GAME:
+        # Allow UNKNOWN game state through - RSPS clients often don't match
+        # standard detection heuristics. Only block definite non-game states.
+        if snap.game_state not in (GameState.IN_GAME, GameState.UNKNOWN):
             return f"Not in game ({snap.game_state.name})"
 
         now = time.time()
 
-        # ── Step 1: Prayers must be on ────────────────────────────────
-        if not snap.prayers_active:
-            if now - self._last_action_time > 1.0:
-                return self._turn_on_prayers(snap)
-            return "Waiting to activate prayers..."
+        # ── Prayer maintenance (non-blocking, with cooldown) ──────────
+        if not snap.prayers_active and (now - self._prayer_check_time > 3.0):
+            self._turn_on_prayers(snap)
+            self._prayer_check_time = now
+            # Don't return - still run the main state machine below
 
-        # ── Step 2: Detect combat / NPC state ─────────────────────────
-        has_npc = snap.in_combat or len(snap.npc_hp_bars) > 0
+        # ── State machine ─────────────────────────────────────────────
+        player_fighting = self._is_player_in_combat(snap)
 
-        # Detect kill: was fighting, now no HP bar
-        if self._was_in_combat and not snap.in_combat:
-            self.stats.moles_killed += 1
-            self._was_in_combat = False
-            self._search_index = 0
-            # Small delay before next cycle
-            delay = self.settings.delay_between_kills_ms / 1000.0
-            time.sleep(delay + random.uniform(0.1, 0.3))
-            return f"Mole #{self.stats.moles_killed} killed! ({self.stats.kills_per_hour:.0f}/hr)"
+        if self.state == EasterState.IDLE:
+            # Wait for kill delay
+            kill_delay = self.settings.delay_between_kills_ms / 1000.0
+            if now - self._last_kill_time < kill_delay and self._last_kill_time > 0:
+                remaining = kill_delay - (now - self._last_kill_time)
+                return f"Waiting between kills... ({remaining:.1f}s)"
 
-        # Currently fighting - just wait
-        if snap.in_combat:
-            self._was_in_combat = True
-            self._last_action_time = now
-            return f"Fighting... Target HP: {snap.target_hp_percent:.0f}%"
+            # Click spade to spawn mole
+            msg = self._click_spade(snap)
+            self.state = EasterState.WAITING_FOR_SPAWN
+            self._spade_click_time = now
+            return msg
 
-        # ── Step 3: No NPC visible - spawn one ───────────────────────
-        # Check minimap for nearby NPC dots too
-        has_nearby_npc = len(snap.minimap_npc_dots) > 0
+        elif self.state == EasterState.WAITING_FOR_SPAWN:
+            # Check if player entered combat (mole spawned and attacked)
+            if player_fighting:
+                self.state = EasterState.IN_COMBAT
+                return "Mole spawned! In combat - waiting for kill..."
 
-        if not has_npc and not has_nearby_npc:
-            if now - self._last_action_time > 1.5:
-                return self._click_spade(snap)
-            return "Waiting to dig..."
+            # Timeout - click spade again
+            timeout = self.settings.spawn_timeout_ms / 1000.0
+            elapsed = now - self._spade_click_time
+            if elapsed > timeout:
+                self.state = EasterState.IDLE
+                return f"Spawn timeout ({timeout:.0f}s) - will retry..."
 
-        # ── Step 4: NPC exists but not in combat - attack it ─────────
-        if now - self._last_action_time > 1.5:
-            return self._attack_mole(snap)
+            return f"Waiting for mole to spawn... ({elapsed:.1f}s)"
 
-        return "Searching for mole..."
+        elif self.state == EasterState.IN_COMBAT:
+            # Wait for combat to end (mole dies)
+            if not player_fighting:
+                self.stats.moles_killed += 1
+                self.state = EasterState.IDLE
+                self._last_kill_time = now
+                return f"Kill #{self.stats.moles_killed}! ({self.stats.kills_per_hour:.0f}/hr)"
+
+            hp = snap.target_hp_percent
+            return f"Fighting... Target HP: {hp:.0f}%"
+
+        return f"Unknown state: {self.state.name}"
+
+    def _is_player_in_combat(self, snap: InterfaceSnapshot) -> bool:
+        """Check if the PLAYER is in combat, not just any NPC visible.
+
+        Filters HP bars by proximity to viewport center. The player's
+        mole spawns on top of them, so its HP bar appears near the
+        center of the viewport. Other players' moles are further away.
+        """
+        if not snap.npc_hp_bars:
+            return False
+
+        cx, cy = snap.viewport_center
+
+        for bar_x, bar_y, bar_w, bar_h, bar_hp in snap.npc_hp_bars:
+            # Center of the HP bar
+            bx = bar_x + bar_w // 2
+            by = bar_y + bar_h // 2
+
+            # Check if this bar is near the player (viewport center)
+            dx = abs(bx - cx)
+            dy = cy - by  # HP bars are ABOVE the NPC, so bar_y < cy
+
+            if dx < self.COMBAT_RADIUS_X and 0 < dy < self.COMBAT_RADIUS_Y:
+                return True
+
+        return False
 
     def _turn_on_prayers(self, snap: InterfaceSnapshot) -> str:
         """Click the quick prayers orb to turn prayers on."""
         w, h = snap.client_width, snap.client_height
-        # Prayer orb center from the prayer_orb region
         x1, y1, x2, y2 = self.detector.region_px("prayer_orb", w, h)
         cx = (x1 + x2) // 2
         cy = (y1 + y2) // 2
         self.mouse.click(cx + random.randint(-3, 3), cy + random.randint(-3, 3))
-        self._last_action_time = time.time()
         return "Turning on prayers..."
 
     def _click_spade(self, snap: InterfaceSnapshot) -> str:
@@ -140,53 +182,14 @@ class EasterEventSystem:
         if 0 <= idx < len(slot_centers):
             cx, cy = slot_centers[idx]
             self.mouse.click(cx + random.randint(-3, 3), cy + random.randint(-3, 3))
-            self._last_action_time = time.time()
-            return f"Clicking spade (slot {self.settings.spade_slot}) - spawning mole"
+            return f"Clicked spade (slot {self.settings.spade_slot}) - spawning mole..."
 
-        return "Spade slot not configured!"
-
-    def _attack_mole(self, snap: InterfaceSnapshot) -> str:
-        """Right-click attack the mole. Searches around viewport center."""
-        cx, cy = snap.viewport_center
-
-        # If we can see an NPC HP bar, click near it
-        if snap.npc_hp_bars:
-            bar = snap.npc_hp_bars[0]
-            tx = bar[0] + bar[2] // 2
-            ty = bar[1] + 20  # Below the HP bar = on the NPC
-            self.mouse.right_click(tx + random.randint(-5, 5), ty + random.randint(-5, 5))
-            time.sleep(random.uniform(0.3, 0.5))
-            self.mouse.click(tx + random.randint(-5, 5), ty + 30)  # "Attack" menu option
-            self._last_action_time = time.time()
-            return "Attacking mole (found HP bar)"
-
-        # Otherwise search in a grid pattern around center
-        offsets = [
-            (0, 0), (0, -40), (0, 40), (-50, 0), (50, 0),
-            (-50, -40), (50, -40), (-50, 40), (50, 40),
-            (0, -80), (0, 80), (-100, 0), (100, 0),
-        ]
-
-        if self._search_index >= len(offsets):
-            self._search_index = 0
-
-        ox, oy = offsets[self._search_index]
-        self._search_index += 1
-
-        sx = cx + ox + random.randint(-8, 8)
-        sy = cy + oy + random.randint(-8, 8)
-
-        self.mouse.right_click(sx, sy)
-        time.sleep(random.uniform(0.3, 0.5))
-        self.mouse.click(sx, sy + 30)  # Click "Attack" option
-
-        self._last_action_time = time.time()
-        return f"Right-click searching for mole (pos {self._search_index})"
+        return f"ERROR: Spade slot {self.settings.spade_slot} out of range!"
 
     def reset(self):
         self.state = EasterState.IDLE
         self.stats = EasterStats()
         self.stats.start_time = time.time()
-        self._was_in_combat = False
-        self._search_index = 0
-        self._last_action_time = 0.0
+        self._spade_click_time = 0.0
+        self._last_kill_time = 0.0
+        self._prayer_check_time = 0.0

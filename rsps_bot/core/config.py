@@ -246,13 +246,13 @@ class SkillingSettings:
 class EasterEventSettings:
     """Easter Baby Mole event - detection-based workflow.
 
-    Simple: prayers on, spade to spawn, attack, repeat.
-    No looting (necklace auto-banks), no eating/potting (unlimited prayers).
+    Simple: prayers on, click spade to spawn mole, mole auto-attacks player,
+    wait for kill, repeat. No looting, no eating, no manual attacking.
     """
     enabled: bool = False
     spade_slot: int = 5                    # Inventory slot with the spade
-    npc_name: str = "Easter baby mole"     # NPC name for right-click attack
     delay_between_kills_ms: int = 1000     # Delay between kill cycles
+    spawn_timeout_ms: int = 5000           # How long to wait for mole after clicking spade
 
 
 @dataclass

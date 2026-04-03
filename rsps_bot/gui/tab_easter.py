@@ -1,17 +1,17 @@
 """Easter Event tab - Easter Baby Mole boss automation.
 
 Detection-based workflow:
-  1. Detects if prayers are on -> turns them on if not
-  2. Detects if mole is spawned -> clicks spade if not
-  3. Detects mole -> attacks it
-  4. Detects kill -> repeats
+  1. Checks if prayers are on -> turns them on if not
+  2. Clicks spade to spawn mole -> mole auto-attacks player
+  3. Waits for mole to die (player auto-retaliates)
+  4. Repeats
 
-No looting (necklace auto-banks), no eating/potting (unlimited prayers).
+Never attacks. No looting. No eating/potting.
 """
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel,
-    QLineEdit, QSpinBox, QCheckBox, QHBoxLayout, QPushButton,
+    QSpinBox, QHBoxLayout, QPushButton,
 )
 from PyQt5.QtCore import pyqtSignal
 
@@ -30,14 +30,15 @@ class EasterEventTab(QWidget):
 
         # Info
         info = QLabel(
-            "Easter Baby Mole Event - detection-based boss farming.\n\n"
-            "The bot DETECTS everything:\n"
-            "  - Prayers off? -> Clicks quick prayers orb\n"
-            "  - No mole?     -> Clicks spade to spawn one\n"
-            "  - Mole visible? -> Right-click attacks it\n"
-            "  - Mole dead?   -> Starts next cycle\n\n"
-            "No looting needed (necklace auto-banks).\n"
-            "No eating/potting needed (prayers are unlimited)."
+            "Easter Baby Mole Event - fully automated boss farming.\n\n"
+            "How it works:\n"
+            "  1. Detects if prayers are off -> clicks quick prayers orb\n"
+            "  2. Clicks spade in inventory -> mole spawns & auto-attacks you\n"
+            "  3. Waits for your mole to die (you auto-retaliate)\n"
+            "  4. Short delay, then clicks spade again\n\n"
+            "The bot NEVER manually attacks - the mole attacks you.\n"
+            "Other players' moles are ignored (only detects combat near your character).\n"
+            "No looting needed (necklace auto-banks). No eating/potting (unlimited prayers)."
         )
         info.setWordWrap(True)
         info.setStyleSheet("color: #f9e2af; padding: 8px; font-size: 11px;")
@@ -55,16 +56,19 @@ class EasterEventTab(QWidget):
         self.spade_slot_spin.setMaximumWidth(80)
         sf.addRow("Spade inventory slot:", self.spade_slot_spin)
 
-        self.npc_name_edit = QLineEdit("Easter baby mole")
-        self.npc_name_edit.setMinimumHeight(28)
-        sf.addRow("NPC name:", self.npc_name_edit)
-
         self.cycle_delay_spin = QSpinBox()
         self.cycle_delay_spin.setRange(0, 10000)
         self.cycle_delay_spin.setValue(1000)
         self.cycle_delay_spin.setSuffix(" ms")
         self.cycle_delay_spin.setMaximumWidth(120)
         sf.addRow("Delay between kills:", self.cycle_delay_spin)
+
+        self.spawn_timeout_spin = QSpinBox()
+        self.spawn_timeout_spin.setRange(1000, 30000)
+        self.spawn_timeout_spin.setValue(5000)
+        self.spawn_timeout_spin.setSuffix(" ms")
+        self.spawn_timeout_spin.setMaximumWidth(120)
+        sf.addRow("Spawn timeout (retry spade):", self.spawn_timeout_spin)
 
         layout.addWidget(settings_group)
 
@@ -85,14 +89,14 @@ class EasterEventTab(QWidget):
 
     def get_settings(self) -> EasterEventSettings:
         return EasterEventSettings(
-            enabled=True,  # Always enabled when this tab starts it
+            enabled=True,
             spade_slot=self.spade_slot_spin.value(),
-            npc_name=self.npc_name_edit.text(),
             delay_between_kills_ms=self.cycle_delay_spin.value(),
+            spawn_timeout_ms=self.spawn_timeout_spin.value(),
         )
 
     def load_profile(self, profile):
         s = profile.easter_event
         self.spade_slot_spin.setValue(s.spade_slot)
-        self.npc_name_edit.setText(s.npc_name)
         self.cycle_delay_spin.setValue(s.delay_between_kills_ms)
+        self.spawn_timeout_spin.setValue(s.spawn_timeout_ms)
