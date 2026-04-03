@@ -44,6 +44,7 @@ class InterfaceSnapshot:
     player_hp_percent: float = 100.0
     in_combat: bool = False
     target_hp_percent: float = 100.0
+    prayers_active: bool = False
     inventory_empty_slots: int = 28
     inventory_full: bool = False
     npc_hp_bars: list = field(default_factory=list)       # List of (x, y, w, h, hp%)
@@ -108,7 +109,10 @@ class InterfaceDetector:
         # 2. Player HP (from the HP orb area)
         snap.player_hp_percent = self._read_hp_orb(image, w, h)
 
-        # 3. Combat state - look for HP bars in viewport
+        # 3. Prayer status (prayer orb brightness)
+        snap.prayers_active = self._read_prayer_orb(image, w, h)
+
+        # 4. Combat state - look for HP bars in viewport
         viewport = self.crop_region(image, "viewport")
         vp_x1, vp_y1, _, _ = self.region_px("viewport", w, h)
         bars = self._find_hp_bars(viewport)
@@ -117,21 +121,21 @@ class InterfaceDetector:
         if bars:
             snap.target_hp_percent = bars[0][4]
 
-        # 4. Inventory
+        # 5. Inventory
         snap.inventory_empty_slots = self._count_empty_inv_slots(image, w, h)
         snap.inventory_full = (snap.inventory_empty_slots == 0)
 
-        # 5. Minimap NPC dots
+        # 6. Minimap NPC dots
         minimap = self.crop_region(image, "minimap")
         mm_x1, mm_y1, _, _ = self.region_px("minimap", w, h)
         dots = self._find_color_blobs(minimap, MINIMAP_NPC_DOT, min_area=4, max_area=80)
         snap.minimap_npc_dots = [(d[0] + mm_x1, d[1] + mm_y1) for d in dots]
 
-        # 6. Ground items in viewport
+        # 7. Ground items in viewport
         ground = self._find_ground_item_text(viewport)
         snap.ground_items = [(g[0] + vp_x1, g[1] + vp_y1, g[2], g[3]) for g in ground]
 
-        # 7. Viewport center
+        # 8. Viewport center
         vp = self._regions.get("viewport", (0, 0, 0.7, 0.75))
         snap.viewport_center = (int(w * (vp[0] + vp[2]) / 2), int(h * (vp[1] + vp[3]) / 2))
 
@@ -209,6 +213,30 @@ class InterfaceDetector:
         if total < 5:
             return 100.0  # Can't see orb clearly, assume full
         return (g_count / total) * 100.0
+
+    # ── Prayer orb detection ────────────────────────────────────────────
+
+    def _read_prayer_orb(self, image: np.ndarray, w: int, h: int) -> bool:
+        """Detect if prayers are active by checking prayer orb brightness.
+
+        When prayers are on, the orb glows bright cyan/blue/white.
+        When off, it's dark and muted.
+        """
+        orb = self.crop_region(image, "prayer_orb")
+        if orb.size == 0:
+            return False
+
+        # Active prayer orb has bright pixels (cyan/white glow)
+        gray = cv2.cvtColor(orb, cv2.COLOR_RGB2GRAY)
+        bright_pct = np.count_nonzero(gray > 140) / gray.size
+
+        # Also check for cyan/blue tint that indicates active prayers
+        b_mean = float(np.mean(orb[:, :, 2]))  # Blue channel
+        g_mean = float(np.mean(orb[:, :, 1]))  # Green channel
+
+        # Prayers active: orb is noticeably brighter than inactive state
+        # Threshold: >15% bright pixels OR strong blue/cyan glow
+        return bright_pct > 0.15 or (b_mean > 100 and g_mean > 80)
 
     # ── HP bar detection ──────────────────────────────────────────────────
 

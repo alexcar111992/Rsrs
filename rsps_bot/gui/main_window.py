@@ -1,4 +1,4 @@
-"""Main GUI window - ties all tabs together."""
+"""Main GUI window - each tab is its own independent bot."""
 
 import subprocess
 import sys
@@ -37,14 +37,23 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(920, 720)
         self.resize(960, 760)
 
-        self.engine = BotEngine()
-        self.profile = BotProfile()
+        # One engine per activity mode
+        self.engine_combat = BotEngine()
+        self.engine_skilling = BotEngine()
+        self.engine_easter = BotEngine()
+
+        # Shared window list (for dropdown)
         self._windows = []
+
+        # Status bridges for thread-safe GUI updates
         self.bridge = StatusBridge()
         self.bridge.status_signal.connect(self._on_status)
         self.bridge.stats_signal.connect(self._on_stats)
-        self.engine.on_status_update = lambda msg: self.bridge.status_signal.emit(msg)
-        self.engine.on_stats_update = lambda s: self.bridge.stats_signal.emit(s)
+
+        # All engines share the same status callback
+        for eng in (self.engine_combat, self.engine_skilling, self.engine_easter):
+            eng.on_status_update = lambda msg: self.bridge.status_signal.emit(msg)
+        self.engine_combat.on_stats_update = lambda s: self.bridge.stats_signal.emit(s)
 
         self._build_ui()
         self._apply_dark_theme()
@@ -100,7 +109,7 @@ class MainWindow(QMainWindow):
         self.layout_combo.setMaximumWidth(250)
         client_form.addRow("Interface Layout:", self.layout_combo)
 
-        # Row 4: Simple mode
+        # Row 4: Simple mode (for combat only)
         self.chk_simple_mode = QCheckBox("SIMPLE MODE  -  just attack + loot, skip food/inventory (for easy NPCs)")
         self.chk_simple_mode.setStyleSheet("color: #a6e3a1; font-weight: bold; font-size: 11px;")
         client_form.addRow(self.chk_simple_mode)
@@ -111,12 +120,12 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tab_combat = CombatTab()
         self.tab_skilling = SkillingTab()
+        self.tab_easter = EasterEventTab()
         self.tab_inventory = InventoryTab()
         self.tab_loot = LootTab()
         self.tab_login = LoginTab()
         self.tab_mouse = MouseTab()
         self.tab_antiban = AntibanTab()
-        self.tab_easter = EasterEventTab()
 
         self.tabs.addTab(self.tab_combat, "Combat / NPC")
         self.tabs.addTab(self.tab_skilling, "Skilling")
@@ -133,11 +142,11 @@ class MainWindow(QMainWindow):
 
         # Per-tab Start / Stop signals
         self.tab_combat.start_requested.connect(lambda: self._start_mode("combat"))
-        self.tab_combat.stop_requested.connect(self._stop)
+        self.tab_combat.stop_requested.connect(lambda: self._stop_mode("combat"))
         self.tab_skilling.start_requested.connect(lambda: self._start_mode("skilling"))
-        self.tab_skilling.stop_requested.connect(self._stop)
+        self.tab_skilling.stop_requested.connect(lambda: self._stop_mode("skilling"))
         self.tab_easter.start_requested.connect(lambda: self._start_mode("easter"))
-        self.tab_easter.stop_requested.connect(self._stop)
+        self.tab_easter.stop_requested.connect(lambda: self._stop_mode("easter"))
 
         # ── Live Stats ────────────────────────────────────────────────
         stats_box = QGroupBox("Live Stats")
@@ -154,25 +163,13 @@ class MainWindow(QMainWindow):
         stats_lay.addStretch()
         root.addWidget(stats_box)
 
-        # ── Control Buttons ───────────────────────────────────────────
+        # ── Profile Save / Load (no global start/stop) ────────────────
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
-        self.btn_start = QPushButton("  START (F5)  ")
-        self.btn_start.setStyleSheet("background:#2a7a2a; color:white; font-size:13px; padding:8px 16px;")
-        self.btn_start.clicked.connect(self._start)
-        self.btn_pause = QPushButton("  PAUSE (F7)  ")
-        self.btn_pause.setStyleSheet("background:#b58a00; color:white; font-size:13px; padding:8px 16px;")
-        self.btn_pause.clicked.connect(self._pause)
-        self.btn_stop = QPushButton("  STOP (F6)  ")
-        self.btn_stop.setStyleSheet("background:#a02020; color:white; font-size:13px; padding:8px 16px;")
-        self.btn_stop.clicked.connect(self._stop)
         btn_save = QPushButton("Save Profile")
         btn_save.clicked.connect(self._save_profile)
         btn_load = QPushButton("Load Profile")
         btn_load.clicked.connect(self._load_profile)
-        btn_row.addWidget(self.btn_start)
-        btn_row.addWidget(self.btn_pause)
-        btn_row.addWidget(self.btn_stop)
         btn_row.addStretch()
         btn_row.addWidget(btn_save)
         btn_row.addWidget(btn_load)
@@ -181,7 +178,7 @@ class MainWindow(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready - Select your game client, configure settings, press START")
+        self.status_bar.showMessage("Ready - Select your game client, configure a tab, press its START button")
 
     # ── Actions ───────────────────────────────────────────────────────
 
@@ -230,7 +227,8 @@ class MainWindow(QMainWindow):
         custom_text = self.window_combo.currentText()
         self.window_combo.clear()
         self._windows = []
-        windows = self.engine.find_game_windows()
+        # Use any engine to find windows (they all have capture)
+        windows = self.engine_combat.find_game_windows()
         self._windows = windows
         for w in windows:
             self.window_combo.addItem(f"{w.title} ({w.width}x{w.height})")
@@ -247,10 +245,20 @@ class MainWindow(QMainWindow):
             if display == text:
                 return w
         if text.strip():
-            matches = self.engine.find_game_windows(text.strip())
+            matches = self.engine_combat.find_game_windows(text.strip())
             if matches:
                 return matches[0]
         return None
+
+    def _get_engine(self, mode: str) -> BotEngine:
+        """Get the engine for the given mode."""
+        if mode == "combat":
+            return self.engine_combat
+        elif mode == "skilling":
+            return self.engine_skilling
+        elif mode == "easter":
+            return self.engine_easter
+        return self.engine_combat
 
     def _collect_profile(self) -> BotProfile:
         p = BotProfile()
@@ -270,12 +278,8 @@ class MainWindow(QMainWindow):
         p.calibration = CalibrationData(layout_name=p.layout)
         return p
 
-    def _start(self):
-        """Start with auto mode (uses enabled flags from profile)."""
-        self._start_mode(None)
-
-    def _start_mode(self, mode):
-        """Start the bot in a specific mode: 'combat', 'skilling', 'easter', or None (auto)."""
+    def _start_mode(self, mode: str):
+        """Start one specific mode. Only uses that tab's settings + shared settings."""
         text = self.window_combo.currentText().strip()
         if not text:
             QMessageBox.warning(self, "No Window",
@@ -287,20 +291,19 @@ class MainWindow(QMainWindow):
                 f"Could not find a window matching:\n\"{text}\"\n\n"
                 "Make sure your RSPS client is open, then click Refresh.")
             return
-        self.engine.set_window(window)
-        self.status_bar.showMessage(f"Attached to: {window.title} ({window.width}x{window.height})")
+
+        engine = self._get_engine(mode)
+        engine.set_window(window)
         profile = self._collect_profile()
-        self.engine.apply_profile(profile)
-        self.engine.set_run_mode(mode)
-        self.engine.start()
-        if mode:
-            self.status_bar.showMessage(f"Started: {mode.title()} mode")
+        engine.apply_profile(profile)
+        engine.start(mode)
+        self.status_bar.showMessage(f"{mode.title()} started")
 
-    def _pause(self):
-        self.engine.pause()
-
-    def _stop(self):
-        self.engine.stop()
+    def _stop_mode(self, mode: str):
+        """Stop one specific mode."""
+        engine = self._get_engine(mode)
+        engine.stop()
+        self.status_bar.showMessage(f"{mode.title()} stopped")
 
     def _save_profile(self):
         profile = self._collect_profile()
@@ -386,7 +389,8 @@ class MainWindow(QMainWindow):
         """)
 
     def closeEvent(self, event):
-        self.engine.stop()
+        for eng in (self.engine_combat, self.engine_skilling, self.engine_easter):
+            eng.stop()
         event.accept()
 
 
