@@ -1,14 +1,8 @@
-"""Skilling tab - user configures stationary skilling activities.
-
-Works for: Mining, Woodcutting, Fishing, Thieving (stalls), Cooking,
-Smithing, Crafting, Fletching, Firemaking, Runecrafting, etc.
-
-User tells the bot exactly what to click and what to do when inventory is full.
-"""
+"""Skilling tab - user configures stationary skilling activities."""
 
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QLabel,
-    QLineEdit, QSpinBox, QComboBox, QCheckBox,
+    QWidget, QVBoxLayout, QFormLayout, QGroupBox, QLabel,
+    QLineEdit, QSpinBox, QComboBox, QCheckBox, QScrollArea,
 )
 
 from rsps_bot.core.config import SkillingSettings, SKILLING_TYPES, INVENTORY_FULL_ACTIONS
@@ -17,10 +11,19 @@ from rsps_bot.core.config import SkillingSettings, SKILLING_TYPES, INVENTORY_FUL
 class SkillingTab(QWidget):
     def __init__(self):
         super().__init__()
-        layout = QVBoxLayout(self)
-        layout.setSpacing(10)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
 
-        # Info banner
+        # Wrap everything in a scroll area so nothing gets squeezed
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        inner = QWidget()
+        layout = QVBoxLayout(inner)
+        layout.setSpacing(10)
+        layout.setContentsMargins(8, 8, 8, 8)
+
+        # Info
         info = QLabel(
             "Configure stationary skilling - the bot clicks the same object repeatedly.\n"
             "Works for: Mining rocks, Chopping trees, Fishing spots, Thieving stalls,\n"
@@ -32,92 +35,103 @@ class SkillingTab(QWidget):
 
         # ── What to skill ─────────────────────────────────────────────
         skill_group = QGroupBox("What To Skill")
-        skill_form = QFormLayout(skill_group)
-        skill_form.setSpacing(10)
-        skill_form.setContentsMargins(12, 20, 12, 12)
+        sf = QFormLayout(skill_group)
+        sf.setSpacing(12)
+        sf.setContentsMargins(12, 24, 12, 12)
 
         self.chk_enabled = QCheckBox("Enable skilling mode (overrides combat)")
         self.chk_enabled.setStyleSheet("color: #a6e3a1; font-weight: bold; font-size: 12px;")
-        skill_form.addRow(self.chk_enabled)
+        sf.addRow(self.chk_enabled)
 
         self.skill_type_combo = QComboBox()
         self.skill_type_combo.addItems(SKILLING_TYPES)
-        skill_form.addRow("Skill type:", self.skill_type_combo)
+        self.skill_type_combo.setMaximumWidth(300)
+        sf.addRow("Skill type:", self.skill_type_combo)
 
         self.object_name_edit = QLineEdit()
         self.object_name_edit.setPlaceholderText("e.g. Iron rock, Yew tree, Fishing spot, Gem stall...")
-        skill_form.addRow("Object name:", self.object_name_edit)
+        self.object_name_edit.setMinimumHeight(28)
+        sf.addRow("Object name:", self.object_name_edit)
 
         self.action_combo = QComboBox()
         self.action_combo.addItems(["Left-click", "Right-click > select option"])
-        skill_form.addRow("Click action:", self.action_combo)
+        self.action_combo.setMaximumWidth(300)
+        sf.addRow("Click action:", self.action_combo)
 
         self.right_click_option = QLineEdit()
         self.right_click_option.setPlaceholderText("e.g. Mine, Chop down, Net, Steal from...")
-        skill_form.addRow("Right-click option:", self.right_click_option)
+        self.right_click_option.setMinimumHeight(28)
+        sf.addRow("Right-click option:", self.right_click_option)
 
         layout.addWidget(skill_group)
 
         # ── Timing ────────────────────────────────────────────────────
         timing_group = QGroupBox("Timing")
-        timing_form = QFormLayout(timing_group)
-        timing_form.setSpacing(10)
-        timing_form.setContentsMargins(12, 20, 12, 12)
+        tf = QFormLayout(timing_group)
+        tf.setSpacing(12)
+        tf.setContentsMargins(12, 24, 12, 12)
 
         self.chk_same_spot = QCheckBox("Click the same spot every time")
         self.chk_same_spot.setChecked(True)
-        timing_form.addRow(self.chk_same_spot)
+        tf.addRow(self.chk_same_spot)
 
         self.delay_spin = QSpinBox()
         self.delay_spin.setRange(200, 30000)
         self.delay_spin.setValue(1000)
         self.delay_spin.setSuffix(" ms")
         self.delay_spin.setSingleStep(100)
-        timing_form.addRow("Re-click delay:", self.delay_spin)
+        self.delay_spin.setMaximumWidth(140)
+        tf.addRow("Re-click delay:", self.delay_spin)
 
         self.chk_wait_anim = QCheckBox("Wait for idle animation before re-clicking")
         self.chk_wait_anim.setChecked(True)
-        timing_form.addRow(self.chk_wait_anim)
+        tf.addRow(self.chk_wait_anim)
 
         layout.addWidget(timing_group)
 
         # ── When inventory is full ────────────────────────────────────
         full_group = QGroupBox("When Inventory Is Full")
-        full_form = QFormLayout(full_group)
-        full_form.setSpacing(10)
-        full_form.setContentsMargins(12, 20, 12, 12)
+        ff = QFormLayout(full_group)
+        ff.setSpacing(12)
+        ff.setContentsMargins(12, 24, 12, 12)
 
         self.full_action_combo = QComboBox()
         self.full_action_combo.addItems(INVENTORY_FULL_ACTIONS)
-        full_form.addRow("Action:", self.full_action_combo)
+        self.full_action_combo.setMaximumWidth(300)
+        ff.addRow("Action:", self.full_action_combo)
 
         self.custom_cmd_edit = QLineEdit()
         self.custom_cmd_edit.setPlaceholderText("e.g. ::empty, ::bank, ::home...")
-        full_form.addRow("Custom command:", self.custom_cmd_edit)
+        self.custom_cmd_edit.setMinimumHeight(28)
+        ff.addRow("Custom command:", self.custom_cmd_edit)
 
         self.drop_items_edit = QLineEdit()
         self.drop_items_edit.setPlaceholderText("Item names to drop, comma separated")
-        full_form.addRow("Drop items:", self.drop_items_edit)
+        self.drop_items_edit.setMinimumHeight(28)
+        ff.addRow("Drop items:", self.drop_items_edit)
 
         layout.addWidget(full_group)
 
-        # ── Use item on object (e.g. knife on logs) ───────────────────
+        # ── Use item on object ────────────────────────────────────────
         use_group = QGroupBox("Use Item On Object (optional)")
-        use_form = QFormLayout(use_group)
-        use_form.setSpacing(10)
-        use_form.setContentsMargins(12, 20, 12, 12)
+        uf = QFormLayout(use_group)
+        uf.setSpacing(12)
+        uf.setContentsMargins(12, 24, 12, 12)
 
         self.chk_use_item = QCheckBox("Use inventory item on object (e.g. Knife on Logs)")
-        use_form.addRow(self.chk_use_item)
+        uf.addRow(self.chk_use_item)
 
         self.use_item_slot_spin = QSpinBox()
         self.use_item_slot_spin.setRange(1, 28)
         self.use_item_slot_spin.setValue(1)
-        use_form.addRow("Item slot #:", self.use_item_slot_spin)
+        self.use_item_slot_spin.setMaximumWidth(80)
+        uf.addRow("Item slot #:", self.use_item_slot_spin)
 
         layout.addWidget(use_group)
-
         layout.addStretch()
+
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
 
     def get_settings(self) -> SkillingSettings:
         drop_names = [

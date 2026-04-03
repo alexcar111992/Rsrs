@@ -28,6 +28,7 @@ from .inventory_manager import InventoryManager
 from .login_system import LoginSystem
 from .antiban import AntibanSystem
 from .skilling_system import SkillingSystem
+from .easter_event import EasterEventSystem
 
 
 class BotEngine:
@@ -43,6 +44,7 @@ class BotEngine:
         self.login = LoginSystem(self.mouse, self.detector)
         self.antiban = AntibanSystem(self.mouse)
         self.skilling = SkillingSystem(self.mouse, self.detector)
+        self.easter = EasterEventSystem(self.mouse, self.detector)
 
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -117,6 +119,9 @@ class BotEngine:
         # Skilling
         self.skilling.configure(profile.skilling)
 
+        # Easter event
+        self.easter.configure(profile.easter_event)
+
         # Anti-ban
         self.antiban.configure(profile.antiban)
 
@@ -151,6 +156,7 @@ class BotEngine:
         self.login.reset()
         self.antiban.reset()
         self.skilling.reset()
+        self.easter.reset()
 
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
@@ -173,6 +179,7 @@ class BotEngine:
     def _run_loop(self):
         """Main bot loop - runs in background thread."""
         self._set_status("Running...")
+        easter_mode = self._profile and self._profile.easter_event.enabled
         skilling_mode = self._profile and self._profile.skilling.enabled
 
         while self._running:
@@ -219,6 +226,16 @@ class BotEngine:
                     self._set_status(f"[Anti-ban] {ab_msg}")
                     if self.antiban.is_afk:
                         continue
+
+                # ── EASTER EVENT MODE ──
+                if easter_mode:
+                    msg = self.easter.tick(image, snap)
+                    if msg:
+                        self._set_status(f"[Easter] {msg}")
+                    if self.on_stats_update:
+                        self.on_stats_update(self.combat.stats)
+                    time.sleep(self._tick_delay)
+                    continue
 
                 # ── SKILLING MODE ──
                 if skilling_mode:

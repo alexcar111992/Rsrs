@@ -21,6 +21,7 @@ from rsps_bot.gui.tab_loot import LootTab
 from rsps_bot.gui.tab_login import LoginTab
 from rsps_bot.gui.tab_mouse import MouseTab
 from rsps_bot.gui.tab_antiban import AntibanTab
+from rsps_bot.gui.tab_easter import EasterEventTab
 
 
 class StatusBridge(QObject):
@@ -115,9 +116,11 @@ class MainWindow(QMainWindow):
         self.tab_login = LoginTab()
         self.tab_mouse = MouseTab()
         self.tab_antiban = AntibanTab()
+        self.tab_easter = EasterEventTab()
 
         self.tabs.addTab(self.tab_combat, "Combat / NPC")
         self.tabs.addTab(self.tab_skilling, "Skilling")
+        self.tabs.addTab(self.tab_easter, "Easter Event")
         self.tabs.addTab(self.tab_inventory, "Inventory")
         self.tabs.addTab(self.tab_loot, "Loot")
         self.tabs.addTab(self.tab_login, "Auto-Login")
@@ -253,6 +256,7 @@ class MainWindow(QMainWindow):
         p.loot_rules = self.tab_loot.get_rules()
         p.login = self.tab_login.get_settings()
         p.mouse = self.tab_mouse.get_settings()
+        p.easter_event = self.tab_easter.get_settings()
         p.antiban = self.tab_antiban.get_settings()
         from rsps_bot.core.config import CalibrationData
         p.calibration = CalibrationData(layout_name=p.layout)
@@ -300,6 +304,7 @@ class MainWindow(QMainWindow):
                 self.tab_loot.load_profile(profile)
                 self.tab_login.load_profile(profile)
                 self.tab_mouse.load_profile(profile)
+                self.tab_easter.load_profile(profile)
                 self.tab_antiban.load_profile(profile)
                 self.layout_combo.setCurrentText(profile.layout)
                 self.jar_path_edit.setText(profile.client_jar_path)

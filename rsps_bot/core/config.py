@@ -243,6 +243,38 @@ class SkillingSettings:
 
 
 @dataclass
+class EasterEventSettings:
+    """Easter Baby Mole event - dedicated workflow."""
+    enabled: bool = False
+    # Prayers
+    protect_melee: bool = True             # Turn on Protect from Melee
+    piety: bool = True                     # Turn on Piety
+    protect_melee_slot: int = 0            # Prayer book position (0 = use quick prayers)
+    piety_slot: int = 0
+    use_quick_prayers: bool = True         # Just click quick prayers orb
+    # Potion
+    sip_super_combat: bool = True          # Sip super combat before fight
+    super_combat_slots: List[int] = field(default_factory=lambda: [1, 2, 3, 4])
+    # Spade
+    spade_slot: int = 5                    # Inventory slot with the spade
+    # NPC
+    npc_name: str = "Easter baby mole"     # Name to right-click attack
+    # Loot
+    loot_all: bool = True                  # Pick up every item on ground
+    loot_delay_ms: int = 600               # Wait before looting
+    # Pet
+    pet_name: str = "Mintor"               # Pet that drops on ground
+    pet_pickup: bool = True                # Pick up pet when it appears
+    pet_resummon: bool = True              # Click pet in inventory to re-summon
+    pet_check_interval: int = 5            # Check for pet every N kills
+    # Timing
+    delay_between_kills_ms: int = 1000     # Delay between full cycles
+    eat_food: bool = True                  # Eat food during fight
+    eat_at_hp_percent: int = 50
+    food_slots: List[int] = field(default_factory=lambda: [24, 25, 26, 27, 28])
+
+
+@dataclass
 class CalibrationData:
     """Stores calibration results for custom layouts."""
     layout_name: str = "317 / OSRS Fixed"
@@ -267,6 +299,7 @@ class BotProfile:
     mouse: MouseSettings = field(default_factory=MouseSettings)
     combat: CombatSettings = field(default_factory=CombatSettings)
     skilling: SkillingSettings = field(default_factory=SkillingSettings)
+    easter_event: EasterEventSettings = field(default_factory=EasterEventSettings)
     antiban: AntibanSettings = field(default_factory=AntibanSettings)
     calibration: CalibrationData = field(default_factory=CalibrationData)
 
@@ -312,6 +345,8 @@ class BotProfile:
             profile.combat = CombatSettings(**data["combat"])
         if "skilling" in data:
             profile.skilling = SkillingSettings(**data["skilling"])
+        if "easter_event" in data:
+            profile.easter_event = EasterEventSettings(**data["easter_event"])
         if "antiban" in data:
             profile.antiban = AntibanSettings(**data["antiban"])
         if "calibration" in data:
