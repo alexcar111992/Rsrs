@@ -22,6 +22,7 @@ from .login_system import LoginSystem
 from .antiban import AntibanSystem
 from .skilling_system import SkillingSystem
 from .easter_event import EasterEventSystem
+from .dust_devils import DustDevilsSystem
 
 
 class BotEngine:
@@ -38,6 +39,7 @@ class BotEngine:
         self.antiban = AntibanSystem(self.mouse)
         self.skilling = SkillingSystem(self.mouse, self.detector)
         self.easter = EasterEventSystem(self.mouse, self.detector)
+        self.dust_devils = DustDevilsSystem(self.mouse, self.detector)
 
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -87,6 +89,7 @@ class BotEngine:
         self.login.configure(profile.login)
         self.skilling.configure(profile.skilling)
         self.easter.configure(profile.easter_event)
+        self.dust_devils.configure(profile.dust_devils)
         self.antiban.configure(profile.antiban)
 
         self._tick_delay = max(0.15, s_min + 0.1)
@@ -123,6 +126,8 @@ class BotEngine:
             self.skilling.reset()
         elif mode == "easter":
             self.easter.reset()
+        elif mode == "dust_devils":
+            self.dust_devils.reset()
 
         self.login.reset()
         self.antiban.reset()
@@ -187,6 +192,11 @@ class BotEngine:
                     msg = self.easter.tick(image, snap)
                     if msg:
                         self._set_status(f"[Easter] {msg}")
+
+                elif mode == "dust_devils":
+                    msg = self.dust_devils.tick(image, snap)
+                    if msg:
+                        self._set_status(f"[Dust Devils] {msg}")
 
                 elif mode == "skilling":
                     msg = self.skilling.tick(image, snap)

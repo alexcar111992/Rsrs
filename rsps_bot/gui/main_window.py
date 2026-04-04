@@ -22,6 +22,7 @@ from rsps_bot.gui.tab_login import LoginTab
 from rsps_bot.gui.tab_mouse import MouseTab
 from rsps_bot.gui.tab_antiban import AntibanTab
 from rsps_bot.gui.tab_easter import EasterEventTab
+from rsps_bot.gui.tab_dust_devils import DustDevilsTab
 
 
 class StatusBridge(QObject):
@@ -41,6 +42,7 @@ class MainWindow(QMainWindow):
         self.engine_combat = BotEngine()
         self.engine_skilling = BotEngine()
         self.engine_easter = BotEngine()
+        self.engine_dust_devils = BotEngine()
 
         # Shared window list (for dropdown)
         self._windows = []
@@ -51,7 +53,7 @@ class MainWindow(QMainWindow):
         self.bridge.stats_signal.connect(self._on_stats)
 
         # All engines share the same status callback
-        for eng in (self.engine_combat, self.engine_skilling, self.engine_easter):
+        for eng in (self.engine_combat, self.engine_skilling, self.engine_easter, self.engine_dust_devils):
             eng.on_status_update = lambda msg: self.bridge.status_signal.emit(msg)
         self.engine_combat.on_stats_update = lambda s: self.bridge.stats_signal.emit(s)
 
@@ -121,6 +123,7 @@ class MainWindow(QMainWindow):
         self.tab_combat = CombatTab()
         self.tab_skilling = SkillingTab()
         self.tab_easter = EasterEventTab()
+        self.tab_dust_devils = DustDevilsTab()
         self.tab_inventory = InventoryTab()
         self.tab_loot = LootTab()
         self.tab_login = LoginTab()
@@ -130,6 +133,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.tab_combat, "Combat / NPC")
         self.tabs.addTab(self.tab_skilling, "Skilling")
         self.tabs.addTab(self.tab_easter, "Easter Event")
+        self.tabs.addTab(self.tab_dust_devils, "Dust Devils")
         self.tabs.addTab(self.tab_inventory, "Inventory")
         self.tabs.addTab(self.tab_loot, "Loot")
         self.tabs.addTab(self.tab_login, "Auto-Login")
@@ -147,6 +151,8 @@ class MainWindow(QMainWindow):
         self.tab_skilling.stop_requested.connect(lambda: self._stop_mode("skilling"))
         self.tab_easter.start_requested.connect(lambda: self._start_mode("easter"))
         self.tab_easter.stop_requested.connect(lambda: self._stop_mode("easter"))
+        self.tab_dust_devils.start_requested.connect(lambda: self._start_mode("dust_devils"))
+        self.tab_dust_devils.stop_requested.connect(lambda: self._stop_mode("dust_devils"))
 
         # ── Live Stats ────────────────────────────────────────────────
         stats_box = QGroupBox("Live Stats")
@@ -258,6 +264,8 @@ class MainWindow(QMainWindow):
             return self.engine_skilling
         elif mode == "easter":
             return self.engine_easter
+        elif mode == "dust_devils":
+            return self.engine_dust_devils
         return self.engine_combat
 
     def _collect_profile(self) -> BotProfile:
@@ -273,6 +281,7 @@ class MainWindow(QMainWindow):
         p.login = self.tab_login.get_settings()
         p.mouse = self.tab_mouse.get_settings()
         p.easter_event = self.tab_easter.get_settings()
+        p.dust_devils = self.tab_dust_devils.get_settings()
         p.antiban = self.tab_antiban.get_settings()
         from rsps_bot.core.config import CalibrationData
         p.calibration = CalibrationData(layout_name=p.layout)
@@ -324,6 +333,7 @@ class MainWindow(QMainWindow):
                 self.tab_login.load_profile(profile)
                 self.tab_mouse.load_profile(profile)
                 self.tab_easter.load_profile(profile)
+                self.tab_dust_devils.load_profile(profile)
                 self.tab_antiban.load_profile(profile)
                 self.layout_combo.setCurrentText(profile.layout)
                 self.jar_path_edit.setText(profile.client_jar_path)
@@ -389,7 +399,7 @@ class MainWindow(QMainWindow):
         """)
 
     def closeEvent(self, event):
-        for eng in (self.engine_combat, self.engine_skilling, self.engine_easter):
+        for eng in (self.engine_combat, self.engine_skilling, self.engine_easter, self.engine_dust_devils):
             eng.stop()
         event.accept()
 

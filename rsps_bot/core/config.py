@@ -256,6 +256,13 @@ class EasterEventSettings:
 
 
 @dataclass
+class DustDevilsSettings:
+    """Dust Devils farming - right-click attack, instant re-attack on kill."""
+    enabled: bool = False
+    npc_name: str = "Dust devil"           # Name in right-click menu
+
+
+@dataclass
 class CalibrationData:
     """Stores calibration results for custom layouts."""
     layout_name: str = "317 / OSRS Fixed"
@@ -281,6 +288,7 @@ class BotProfile:
     combat: CombatSettings = field(default_factory=CombatSettings)
     skilling: SkillingSettings = field(default_factory=SkillingSettings)
     easter_event: EasterEventSettings = field(default_factory=EasterEventSettings)
+    dust_devils: DustDevilsSettings = field(default_factory=DustDevilsSettings)
     antiban: AntibanSettings = field(default_factory=AntibanSettings)
     calibration: CalibrationData = field(default_factory=CalibrationData)
 
@@ -328,6 +336,8 @@ class BotProfile:
             profile.skilling = SkillingSettings(**data["skilling"])
         if "easter_event" in data:
             profile.easter_event = EasterEventSettings(**data["easter_event"])
+        if "dust_devils" in data:
+            profile.dust_devils = DustDevilsSettings(**data["dust_devils"])
         if "antiban" in data:
             profile.antiban = AntibanSettings(**data["antiban"])
         if "calibration" in data:
