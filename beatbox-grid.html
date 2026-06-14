@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BeatBox Grid — Drum Sound Detector & Quantizer</title>
+<style>
+  :root{
+    --bg:#0e0f13; --panel:#171922; --panel2:#1f2330; --line:#2a2f3d;
+    --text:#e7eaf0; --muted:#8b93a7; --accent:#5b8cff; --accent2:#19c37d;
+    --kick:#ff5d73; --snare:#ffb02e; --hat:#3ddc97; --clap:#9b8cff;
+    --grid-strong:#3a4257; --grid-weak:#232838;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  header{
+    padding:10px 16px; background:linear-gradient(180deg,#1a1d27,#14161e);
+    border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px;
+    flex-wrap:wrap;
+  }
+  .logo{font-weight:800; font-size:18px; letter-spacing:.3px; white-space:nowrap}
+  .logo span{color:var(--accent)}
+  .tag{color:var(--muted); font-size:12px}
+  .toolbar{
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  .group{
+    display:flex; gap:6px; align-items:center; background:var(--panel2);
+    padding:6px 10px; border-radius:10px; border:1px solid var(--line);
+  }
+  .group label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px}
+  button{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    padding:8px 12px; border-radius:9px; cursor:pointer; font-weight:600; font-size:13px;
+    transition:.15s; white-space:nowrap;
+  }
+  button:hover{border-color:var(--accent); background:#262b3a}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  button.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  button.primary:hover{filter:brightness(1.1)}
+  button.go{background:var(--accent2); border-color:var(--accent2); color:#04231a}
+  button.danger{border-color:#5a2730}
+  input[type=number],select,input[type=text]{
+    background:#0c0e14; color:var(--text); border:1px solid var(--line);
+    border-radius:8px; padding:7px 8px; font-size:13px; outline:none;
+  }
+  input[type=number]{width:74px}
+  input[type=range]{accent-color:var(--accent); width:120px}
+  select{cursor:pointer}
+  .val{font-variant-numeric:tabular-nums; color:var(--accent); font-weight:700; min-width:34px; text-align:right}
+  main{flex:1; display:flex; min-height:0}
+  .stage{flex:1; display:flex; flex-direction:column; min-width:0}
+  .gridwrap{flex:1; position:relative; overflow:auto; background:var(--bg)}
+  canvas{display:block}
+  .side{
+    width:250px; background:var(--panel); border-left:1px solid var(--line);
+    padding:14px; overflow:auto; font-size:13px;
+  }
+  .side h3{margin:0 0 8px; font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted)}
+  .legend{display:flex; flex-direction:column; gap:7px; margin-bottom:18px}
+  .legrow{display:flex; align-items:center; gap:9px}
+  .swatch{width:14px; height:14px; border-radius:4px}
+  .stat{display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--line)}
+  .stat b{color:var(--accent)}
+  .hint{color:var(--muted); font-size:12px; line-height:1.5; margin-top:10px}
+  .hint code{background:#0c0e14; padding:1px 5px; border-radius:4px; color:var(--accent)}
+  footer{
+    padding:6px 16px; font-size:11px; color:var(--muted);
+    border-top:1px solid var(--line); background:var(--panel); display:flex; gap:18px; flex-wrap:wrap;
+  }
+  .dropzone{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:10px; color:var(--muted); pointer-events:none;
+  }
+  .dropzone.show{background:rgba(91,140,255,.08); border:2px dashed var(--accent); pointer-events:auto}
+  .dz-big{font-size:22px; font-weight:700; color:var(--text)}
+  #status{font-size:12px; color:var(--muted); min-width:120px}
+  #status.busy{color:var(--accent)}
+  .seg{display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden}
+  .seg button{border:none; border-radius:0; border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:none}
+  .seg button.active{background:var(--accent); color:#fff}
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+    background:#222838; border:1px solid var(--accent); color:var(--text);
+    padding:10px 18px; border-radius:10px; font-size:13px; opacity:0; transition:.3s; pointer-events:none; z-index:50;
+  }
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Beat<span>Box</span> Grid</div>
+  <div class="tag">Detect &middot; Slice &middot; Quantize &middot; Re-genre your beatbox</div>
+  <div style="flex:1"></div>
+  <div id="status">Load a beatbox recording to begin</div>
+</header>
+
+<div class="toolbar">
+  <button id="loadBtn" class="primary">⬆ Upload Audio</button>
+  <button id="micBtn">● Record Mic</button>
+  <input type="file" id="file" accept="audio/*" style="display:none">
+
+  <div class="group">
+    <label>Genre</label>
+    <select id="genre"></select>
+  </div>
+  <div class="group">
+    <label>BPM</label>
+    <input type="number" id="bpm" value="90" min="40" max="220" step="1">
+  </div>
+  <div class="group">
+    <label>Grid</label>
+    <select id="resolution">
+      <option value="4">1/4</option>
+      <option value="8" selected>1/8</option>
+      <option value="16">1/16</option>
+      <option value="32">1/32</option>
+      <option value="12">1/8T</option>
+      <option value="24">1/16T</option>
+    </select>
+  </div>
+  <div class="group">
+    <label>Swing</label>
+    <input type="range" id="swing" min="0" max="60" value="0">
+    <span class="val" id="swingVal">0%</span>
+  </div>
+
+  <div class="group">
+    <label>Sensitivity</label>
+    <input type="range" id="sens" min="5" max="95" value="42">
+    <span class="val" id="sensVal">42</span>
+  </div>
+
+  <button id="detectBtn" class="go" disabled>✦ Detect & Snap</button>
+  <button id="resnapBtn" disabled>↻ Re-snap</button>
+
+  <div style="flex:1"></div>
+
+  <button id="playBtn" disabled>▶ Play</button>
+  <button id="stopBtn" disabled>■ Stop</button>
+  <div class="group">
+    <label>Click</label>
+    <input type="checkbox" id="metro">
+  </div>
+  <button id="wavBtn" disabled>⬇ WAV</button>
+  <button id="midiBtn" disabled>⬇ MIDI</button>
+  <button id="clearBtn" class="danger" disabled>Clear</button>
+</div>
+
+<main>
+  <div class="stage">
+    <div class="gridwrap" id="gridwrap">
+      <canvas id="grid"></canvas>
+      <div class="dropzone" id="dropzone">
+        <div class="dz-big">Drop a beatbox recording here</div>
+        <div>or click “Upload Audio” &middot; wav / mp3 / m4a / ogg</div>
+      </div>
+    </div>
+  </div>
+  <aside class="side">
+    <h3>Lanes</h3>
+    <div class="legend">
+      <div class="legrow"><span class="swatch" style="background:var(--kick)"></span> Kick <span style="flex:1"></span><span class="muted" id="cKick">0</span></div>
+      <div class="legrow"><span class="swatch" style="background:var(--snare)"></span> Snare <span style="flex:1"></span><span class="muted" id="cSnare">0</span></div>
+      <div class="legrow"><span class="swatch" style="background:var(--hat)"></span> Hi-Hat <span style="flex:1"></span><span class="muted" id="cHat">0</span></div>
+      <div class="legrow"><span class="swatch" style="background:var(--clap)"></span> Clap <span style="flex:1"></span><span class="muted" id="cClap">0</span></div>
+    </div>
+
+    <h3>Project</h3>
+    <div class="stat"><span>Detected hits</span><b id="sHits">0</b></div>
+    <div class="stat"><span>Bars</span><b id="sBars">0</b></div>
+    <div class="stat"><span>Source length</span><b id="sLen">0.0s</b></div>
+    <div class="stat"><span>Loop length</span><b id="sLoop">0.0s</b></div>
+
+    <h3 style="margin-top:18px">How to edit</h3>
+    <div class="hint">
+      • <b>Drag</b> a block sideways to retime — it snaps to the grid.<br>
+      • Drag <b>up / down</b> between lanes to change its drum type.<br>
+      • <code>Alt-drag</code> or double-click to <b>duplicate</b> a hit.<br>
+      • Select a block and press <code>Delete</code> to remove it.<br>
+      • Scroll to pan; the playhead shows playback.
+    </div>
+    <div class="hint" style="margin-top:14px">
+      Pick a genre or type a BPM, then <b>Re-snap</b> to lock your beatbox to a new groove. Export the tightened audio as <b>WAV</b> or the pattern as a <b>MIDI</b> drum track for any DAW.
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span>Detection: spectral-flux onsets + timbral classification (all in-browser, nothing uploaded).</span>
+  <span id="footHint"></span>
+</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================================
+   BeatBox Grid — single-file web app
+   Pipeline: decode → onset detection (spectral flux) → per-hit feature
+   extraction → kick/snare/hat/clap classification → quantize to BPM grid →
+   editable drum-grid (drag/retime/reassign/dup/delete) → playback →
+   export quantized WAV (offline render) + GM drum MIDI.
+   ============================================================================ */
+
+/* ---------- small helpers ---------- */
+const $ = id => document.getElementById(id);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const LANES = ["kick","snare","hat","clap"];
+const LANE_LABEL = {kick:"Kick",snare:"Snare",hat:"Hi-Hat",clap:"Clap"};
+const LANE_COLOR = {kick:"#ff5d73",snare:"#ffb02e",hat:"#3ddc97",clap:"#9b8cff"};
+const GM_NOTE   = {kick:36,snare:38,hat:42,clap:39}; // General MIDI drum map
+function toast(msg){const t=$("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
+function setStatus(s,busy){const e=$("status");e.textContent=s;e.classList.toggle("busy",!!busy);}
+
+/* ---------- genre presets (default bpm + suggested grid) ---------- */
+const GENRES = {
+  "Custom":          {bpm:90,  res:8},
+  "Boom Bap (Hip-Hop)":{bpm:90, res:16},
+  "Trap":            {bpm:140, res:16},
+  "Drill":           {bpm:142, res:16},
+  "Lo-Fi":           {bpm:78,  res:16},
+  "House":           {bpm:124, res:16},
+  "Techno":          {bpm:130, res:16},
+  "Drum & Bass":     {bpm:174, res:16},
+  "Dubstep":         {bpm:140, res:16},
+  "Garage (2-Step)": {bpm:132, res:16},
+  "Afrobeats":       {bpm:104, res:16},
+  "Reggaeton":       {bpm:96,  res:16},
+  "Pop":             {bpm:100, res:16},
+  "Rock":            {bpm:120, res:8},
+  "Funk":            {bpm:108, res:16},
+};
+
+/* ============================================================================
+   AUDIO STATE
+   ============================================================================ */
+let actx = null;                 // AudioContext (created on first user action)
+let srcBuffer = null;            // decoded AudioBuffer (mono analysis copy below)
+let monoData = null;             // Float32Array mono mixdown
+let sampleRate = 44100;
+let hits = [];                   // [{type, t0, t1, gridT, dur, sel}]  t in seconds (source); gridT = quantized start
+let playing = false;
+let playNodes = [];
+let playStart = 0;               // actx.currentTime at loop start
+let rafId = 0;
+let selected = null;
+
+/* ============================================================================
+   UI ELEMENTS
+   ============================================================================ */
+const genreSel = $("genre");
+Object.keys(GENRES).forEach(g=>{const o=document.createElement("option");o.value=g;o.textContent=g;genreSel.appendChild(o);});
+genreSel.value = "Boom Bap (Hip-Hop)";
+
+function curBpm(){return clamp(parseFloat($("bpm").value)||90,30,300);}
+function curRes(){return parseInt($("resolution").value,10);} // steps per beat-ish (see stepDur)
+/* step duration in seconds. res maps: 4→1/4(1 beat),8→1/8,16→1/16,32→1/32,12→1/8T,24→1/16T */
+function stepDur(){
+  const beat = 60/curBpm();
+  const r = curRes();
+  switch(r){
+    case 4:  return beat;          // quarter
+    case 8:  return beat/2;        // eighth
+    case 16: return beat/4;        // sixteenth
+    case 32: return beat/8;        // thirty-second
+    case 12: return beat/3;        // eighth triplet
+    case 24: return beat/6;        // sixteenth triplet
+    default: return beat/4;
+  }
+}
+function swingAmt(){return (parseInt($("swing").value,10)||0)/100;}
+
+/* ============================================================================
+   LOAD AUDIO
+   ============================================================================ */
+$("loadBtn").onclick = ()=> $("file").click();
+$("file").onchange = e=>{ if(e.target.files[0]) loadFile(e.target.files[0]); };
+
+const dz = $("dropzone"), gw = $("gridwrap");
+["dragenter","dragover"].forEach(ev=>gw.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("show");}));
+["dragleave","drop"].forEach(ev=>gw.addEventListener(ev,e=>{e.preventDefault();if(ev==="drop"||e.target===dz)dz.classList.remove("show");}));
+gw.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("show");const f=e.dataTransfer.files[0];if(f)loadFile(f);});
+
+function ensureCtx(){ if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==="suspended") actx.resume(); return actx; }
+
+async function loadFile(file){
+  try{
+    ensureCtx();
+    setStatus("Decoding "+file.name+" …",true);
+    const buf = await file.arrayBuffer();
+    srcBuffer = await actx.decodeAudioData(buf);
+    sampleRate = srcBuffer.sampleRate;
+    monoData = mixToMono(srcBuffer);
+    hits = []; selected = null;
+    $("detectBtn").disabled = false;
+    $("sLen").textContent = srcBuffer.duration.toFixed(1)+"s";
+    setStatus(`Loaded ${file.name} — ${srcBuffer.duration.toFixed(1)}s. Click “Detect & Snap”.`);
+    dz.style.display="none";
+    fitGrid(); draw();
+    toast("Loaded. Now hit “Detect & Snap”.");
+  }catch(err){ console.error(err); setStatus("Could not decode that file."); toast("Decode failed — try a wav/mp3."); }
+}
+function mixToMono(b){
+  const n=b.length, out=new Float32Array(n), ch=b.numberOfChannels;
+  for(let c=0;c<ch;c++){const d=b.getChannelData(c);for(let i=0;i<n;i++)out[i]+=d[i]/ch;}
+  return out;
+}
+
+/* ---------- mic recording ---------- */
+let mediaRec=null, recChunks=[];
+$("micBtn").onclick = async ()=>{
+  if(mediaRec && mediaRec.state==="recording"){ mediaRec.stop(); return; }
+  try{
+    ensureCtx();
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRec = new MediaRecorder(stream); recChunks=[];
+    mediaRec.ondataavailable = e=>recChunks.push(e.data);
+    mediaRec.onstop = async ()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      const blob = new Blob(recChunks,{type:recChunks[0]?.type||"audio/webm"});
+      $("micBtn").textContent="● Record Mic";
+      await loadFile(new File([blob],"mic-recording"));
+    };
+    mediaRec.start();
+    $("micBtn").textContent="■ Stop Rec";
+    setStatus("Recording… beatbox your pattern, then press Stop Rec.",true);
+  }catch(err){ toast("Mic access denied."); }
+};
+
+/* ============================================================================
+   FFT (iterative radix-2) — used for spectral flux + feature extraction
+   ============================================================================ */
+function fft(re,im){
+  const n=re.length;
+  for(let i=1,j=0;i<n;i++){
+    let bit=n>>1;
+    for(;j&bit;bit>>=1) j^=bit;
+    j^=bit;
+    if(i<j){ [re[i],re[j]]=[re[j],re[i]]; [im[i],im[j]]=[im[j],im[i]]; }
+  }
+  for(let len=2;len<=n;len<<=1){
+    const ang=-2*Math.PI/len, wr=Math.cos(ang), wi=Math.sin(ang);
+    for(let i=0;i<n;i+=len){
+      let cr=1, ci=0;
+      for(let k=0;k<len/2;k++){
+        const ar=re[i+k], ai=im[i+k];
+        const br=re[i+k+len/2], bi=im[i+k+len/2];
+        const tr=br*cr-bi*ci, ti=br*ci+bi*cr;
+        re[i+k]=ar+tr; im[i+k]=ai+ti;
+        re[i+k+len/2]=ar-tr; im[i+k+len/2]=ai-ti;
+        const ncr=cr*wr-ci*wi; ci=cr*wi+ci*wr; cr=ncr;
+      }
+    }
+  }
+}
+const hann = (() => { const cache={}; return N=>{ if(cache[N])return cache[N]; const w=new Float32Array(N); for(let i=0;i<N;i++)w[i]=0.5-0.5*Math.cos(2*Math.PI*i/(N-1)); cache[N]=w; return w; }; })();
+
+/* ============================================================================
+   ONSET DETECTION  (spectral flux + adaptive peak picking)
+   ============================================================================ */
+function detectOnsets(sensPct){
+  const N=1024, HOP=256, w=hann(N);
+  const data=monoData, len=data.length;
+  const nFrames=Math.max(0,Math.floor((len-N)/HOP));
+  const flux=new Float32Array(nFrames);
+  let prevMag=new Float32Array(N/2);
+  const re=new Float32Array(N), im=new Float32Array(N);
+  for(let f=0;f<nFrames;f++){
+    const off=f*HOP;
+    for(let i=0;i<N;i++){ re[i]=data[off+i]*w[i]; im[i]=0; }
+    fft(re,im);
+    let sum=0;
+    for(let k=0;k<N/2;k++){
+      const m=Math.hypot(re[k],im[k]);
+      const d=m-prevMag[k];
+      if(d>0) sum+=d;
+      prevMag[k]=m;
+    }
+    flux[f]=sum;
+  }
+  // normalize + moving-average threshold
+  let mx=0; for(let i=0;i<nFrames;i++) if(flux[i]>mx)mx=flux[i];
+  if(mx>0) for(let i=0;i<nFrames;i++) flux[i]/=mx;
+  const win=18; // ~ window for local mean
+  const thr=new Float32Array(nFrames);
+  const base = 0.02 + (1 - sensPct/100)*0.28;  // sensitivity → higher = lower threshold
+  for(let i=0;i<nFrames;i++){
+    let s=0,c=0;
+    for(let j=i-win;j<=i+win;j++){ if(j>=0&&j<nFrames){s+=flux[j];c++;} }
+    thr[i] = base + (s/c)*1.4;
+  }
+  const minGapFrames = Math.round((0.045*sampleRate)/HOP); // 45ms min between hits
+  const onsets=[];
+  let last=-1e9;
+  for(let i=1;i<nFrames-1;i++){
+    if(flux[i]>thr[i] && flux[i]>=flux[i-1] && flux[i]>flux[i+1] && (i-last)>minGapFrames){
+      onsets.push(i*HOP);  // sample index
+      last=i;
+    }
+  }
+  return onsets; // array of sample offsets
+}
+
+/* ============================================================================
+   FEATURE EXTRACTION + CLASSIFICATION
+   ============================================================================ */
+function classifyHit(startSample){
+  const N=2048;
+  const data=monoData;
+  const start=Math.max(0,startSample-128);
+  const re=new Float32Array(N), im=new Float32Array(N), w=hann(N);
+  for(let i=0;i<N;i++){ const s=data[start+i]||0; re[i]=s*w[i]; im[i]=0; }
+  fft(re,im);
+  const nyq=sampleRate/2, bin=nyq/(N/2);
+  let total=0, low=0, lowMid=0, mid=0, high=0, vhigh=0, centNum=0;
+  for(let k=1;k<N/2;k++){
+    const freq=k*bin, m=Math.hypot(re[k],im[k]);
+    total+=m; centNum+=freq*m;
+    if(freq<140) low+=m;
+    else if(freq<280) lowMid+=m;
+    else if(freq<2200) mid+=m;
+    else if(freq<7000) high+=m;
+    else vhigh+=m;
+  }
+  if(total<1e-6) return {type:"hat", dur:0.05};
+  const centroid = centNum/total;
+  const lowR=low/total, lowMidR=lowMid/total, midR=mid/total, highR=high/total, vhighR=vhigh/total;
+
+  // zero-crossing rate over a short window (noisiness)
+  let zc=0; const zN=Math.min(1500,data.length-startSample-1);
+  for(let i=1;i<zN;i++){ const a=data[startSample+i-1], b=data[startSample+i]; if((a<0&&b>=0)||(a>=0&&b<0)) zc++; }
+  const zcr = zc/Math.max(1,zN);
+
+  // decay length estimate (samples until energy falls below 12% of peak)
+  let peak=0; for(let i=0;i<2000&&startSample+i<data.length;i++){const a=Math.abs(data[startSample+i]); if(a>peak)peak=a;}
+  let decay=0; const thr=peak*0.12;
+  for(let i=0;i<sampleRate*0.4 && startSample+i<data.length;i++){ if(Math.abs(data[startSample+i])>thr) decay=i; }
+  const decaySec = decay/sampleRate;
+
+  /* --- heuristic decision tree --- */
+  let type;
+  if(centroid < 350 && lowR > 0.30){
+    type="kick";
+  } else if(centroid > 5200 && (highR+vhighR) > 0.45 && zcr > 0.08){
+    type="hat";
+  } else if((highR+vhighR) > 0.30 && zcr > 0.06 && decaySec < 0.12 && lowMidR < 0.18){
+    // bright, noisy, short, little body → clap
+    type="clap";
+  } else if(lowMidR > 0.12 || (midR > 0.30 && centroid < 3500)){
+    type="snare";
+  } else if(centroid > 4200){
+    type="hat";
+  } else {
+    type="snare";
+  }
+  const dur = clamp(decaySec || 0.08, 0.03, 0.5);
+  return {type, dur};
+}
+
+/* ============================================================================
+   DETECT & QUANTIZE
+   ============================================================================ */
+$("detectBtn").onclick = ()=> setTimeout(runDetect,20);
+function runDetect(){
+  if(!monoData) return;
+  setStatus("Analysing onsets & timbre…",true);
+  const onsets = detectOnsets(parseInt($("sens").value,10));
+  hits = onsets.map(s=>{
+    const c = classifyHit(s);
+    const t0 = s/sampleRate;
+    return {type:c.type, t0, t1:Math.min(srcBuffer.duration, t0+c.dur), dur:c.dur, gridT:t0, sel:false};
+  });
+  quantize();
+  refitForLoop();
+  enableEdit();
+  updateCounts();
+  setStatus(`Found ${hits.length} hits — snapped to ${curBpm()} BPM. Drag blocks to fix or duplicate.`);
+  toast(`Detected ${hits.length} hits`);
+  draw();
+}
+$("resnapBtn").onclick = ()=>{ if(!hits.length)return; quantize(); refitForLoop(); updateCounts(); draw(); setStatus(`Re-snapped to ${curBpm()} BPM.`); };
+
+/* snap each hit's gridT to nearest grid step (with swing on off-steps) */
+function quantize(){
+  const step=stepDur(), sw=swingAmt();
+  hits.forEach(h=>{
+    let idx=Math.round(h.t0/step);
+    let g=idx*step;
+    if(sw>0 && (idx%2===1)) g += step*sw*0.5; // delay odd steps → swing
+    h.gridT=Math.max(0,g);
+  });
+  hits.sort((a,b)=>a.gridT-b.gridT);
+}
+
+/* ============================================================================
+   GRID GEOMETRY  +  RENDER
+   ============================================================================ */
+const canvas=$("grid"), ctx=canvas.getContext("2d");
+let PXPB = 220;                 // pixels per bar (zoom)
+const LANE_H = 86, HEAD_H = 28, LEFT = 64;
+let loopBars = 4;
+
+function loopDur(){ return loopBars * 4 * (60/curBpm()); } // 4/4 assumed
+
+function refitForLoop(){
+  const maxT = hits.reduce((m,h)=>Math.max(m,h.gridT+ (h.dur||0.1)),0);
+  const barDur = 4*(60/curBpm());
+  loopBars = Math.max(2, Math.ceil((maxT+0.05)/barDur));
+  fitGrid();
+  $("sBars").textContent=loopBars;
+  $("sLoop").textContent=loopDur().toFixed(1)+"s";
+}
+function fitGrid(){
+  const w = LEFT + loopBars*PXPB + 40;
+  const h = HEAD_H + LANES.length*LANE_H + 8;
+  const dpr = window.devicePixelRatio||1;
+  canvas.style.width=w+"px"; canvas.style.height=h+"px";
+  canvas.width=w*dpr; canvas.height=h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function xForTime(t){ const barDur=4*(60/curBpm()); return LEFT + (t/barDur)*PXPB; }
+function timeForX(x){ const barDur=4*(60/curBpm()); return (x-LEFT)/PXPB*barDur; }
+function laneForY(y){ const i=Math.floor((y-HEAD_H)/LANE_H); return LANES[clamp(i,0,3)]; }
+function laneTop(type){ return HEAD_H + LANES.indexOf(type)*LANE_H; }
+
+function draw(){
+  const W=canvas.width/(window.devicePixelRatio||1), H=canvas.height/(window.devicePixelRatio||1);
+  ctx.clearRect(0,0,W,H);
+  // lane backgrounds + labels
+  LANES.forEach((ln,i)=>{
+    const y=HEAD_H+i*LANE_H;
+    ctx.fillStyle = i%2 ? "#13151d" : "#15181f";
+    ctx.fillRect(0,y,W,LANE_H);
+    ctx.fillStyle="#0c0e14"; ctx.fillRect(0,y,LEFT,LANE_H);
+    ctx.fillStyle=LANE_COLOR[ln]; ctx.fillRect(0,y,4,LANE_H);
+    ctx.fillStyle="#cfd5e3"; ctx.font="600 12px system-ui"; ctx.textBaseline="middle";
+    ctx.fillText(LANE_LABEL[ln],12,y+LANE_H/2);
+  });
+  // grid lines
+  const step=stepDur(), beat=60/curBpm(), barDur=4*beat;
+  const totalT=loopBars*barDur;
+  // step lines
+  ctx.strokeStyle="var(--grid-weak)";
+  for(let t=0;t<=totalT+1e-6;t+=step){
+    const x=xForTime(t);
+    ctx.strokeStyle="#1d2230"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x,HEAD_H); ctx.lineTo(x,H); ctx.stroke();
+  }
+  // beat lines
+  for(let t=0;t<=totalT+1e-6;t+=beat){
+    const x=xForTime(t); const isBar=Math.abs((t/barDur)-Math.round(t/barDur))<1e-6;
+    ctx.strokeStyle=isBar?"#3a4257":"#262c3b"; ctx.lineWidth=isBar?2:1;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    if(isBar){ ctx.fillStyle="#7c879b"; ctx.font="600 11px system-ui"; ctx.textBaseline="top"; ctx.fillText("Bar "+(Math.round(t/barDur)+1), x+4,6); }
+  }
+  // header bottom
+  ctx.strokeStyle="#2a2f3d"; ctx.beginPath(); ctx.moveTo(0,HEAD_H); ctx.lineTo(W,HEAD_H); ctx.stroke();
+
+  // hit blocks (with mini waveform)
+  hits.forEach(h=>drawHit(h));
+
+  // playhead
+  if(playing){
+    const pos=((actx.currentTime-playStart)%loopDur());
+    const x=xForTime(pos);
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.moveTo(x-5,0); ctx.lineTo(x+5,0); ctx.lineTo(x,8); ctx.fill();
+  }
+}
+function drawHit(h){
+  const y=laneTop(h.type)+8, hgt=LANE_H-16;
+  const x=xForTime(h.gridT);
+  const wdur=Math.max(0.04, h.dur||0.1);
+  const w=Math.max(10, (wdur/(4*60/curBpm()))*PXPB);
+  const col=LANE_COLOR[h.type];
+  ctx.save();
+  ctx.fillStyle = h.sel ? "#ffffff22" : col+"22";
+  ctx.strokeStyle = h.sel ? "#fff" : col;
+  ctx.lineWidth = h.sel?2:1.5;
+  roundRect(x,y,w,hgt,5); ctx.fill(); ctx.stroke();
+  // mini waveform of the source slice
+  ctx.strokeStyle=col; ctx.globalAlpha=0.85; ctx.lineWidth=1;
+  const s0=Math.floor(h.t0*sampleRate), s1=Math.min(monoData.length,Math.floor(h.t1*sampleRate));
+  const n=s1-s0;
+  if(n>1){
+    const mid=y+hgt/2; ctx.beginPath();
+    const cols=Math.max(2,Math.floor(w-4));
+    for(let px=0;px<cols;px++){
+      const a=s0+Math.floor(px/cols*n), b=s0+Math.floor((px+1)/cols*n);
+      let pk=0; for(let i=a;i<b;i++){const v=Math.abs(monoData[i]);if(v>pk)pk=v;}
+      const yy=pk*(hgt/2-2);
+      ctx.moveTo(x+2+px, mid-yy); ctx.lineTo(x+2+px, mid+yy);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+/* ============================================================================
+   EDITING (drag to retime / change lane / duplicate / delete)
+   ============================================================================ */
+let drag=null;
+function hitAt(mx,my){
+  // topmost (last drawn) under cursor
+  for(let i=hits.length-1;i>=0;i--){
+    const h=hits[i], y=laneTop(h.type)+8, hgt=LANE_H-16, x=xForTime(h.gridT);
+    const w=Math.max(10,((h.dur||0.1)/(4*60/curBpm()))*PXPB);
+    if(mx>=x&&mx<=x+w&&my>=y&&my<=y+hgt) return h;
+  }
+  return null;
+}
+canvas.addEventListener("mousedown",e=>{
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  if(my<HEAD_H){ // scrub: start playback from here? just move selection off
+    return;
+  }
+  let h=hitAt(mx,my);
+  if(h){
+    if(e.altKey){ // duplicate
+      h={...h}; hits.push(h);
+    }
+    hits.forEach(x=>x.sel=false); h.sel=true; selected=h;
+    drag={h, offT:timeForX(mx)-h.gridT, moved:false};
+  } else {
+    if(selected){selected.sel=false; selected=null;}
+  }
+  draw();
+});
+window.addEventListener("mousemove",e=>{
+  if(!drag) return;
+  const r=canvas.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  const t=timeForX(mx)-drag.offT;
+  const step=stepDur(), sw=swingAmt();
+  let idx=Math.round(t/step), g=idx*step;
+  if(sw>0 && idx%2===1) g+=step*sw*0.5;
+  drag.h.gridT=clamp(g,0,loopDur()-0.01);
+  drag.h.type=laneForY(my);
+  drag.moved=true;
+  draw();
+});
+window.addEventListener("mouseup",()=>{ if(drag){ hits.sort((a,b)=>a.gridT-b.gridT); updateCounts(); draw(); drag=null; } });
+canvas.addEventListener("dblclick",e=>{
+  const r=canvas.getBoundingClientRect();
+  const h=hitAt(e.clientX-r.left,e.clientY-r.top);
+  if(h){ const c={...h, gridT:h.gridT+stepDur()}; hits.push(c); hits.sort((a,b)=>a.gridT-b.gridT); updateCounts(); draw(); toast("Duplicated"); }
+});
+window.addEventListener("keydown",e=>{
+  if((e.key==="Delete"||e.key==="Backspace") && selected){
+    hits=hits.filter(h=>h!==selected); selected=null; updateCounts(); draw(); e.preventDefault();
+  }
+  if(e.code==="Space"){ e.preventDefault(); playing?stopPlay():startPlay(); }
+});
+
+function enableEdit(){
+  ["resnapBtn","playBtn","stopBtn","wavBtn","midiBtn","clearBtn"].forEach(id=>$(id).disabled=false);
+}
+function updateCounts(){
+  const c={kick:0,snare:0,hat:0,clap:0}; hits.forEach(h=>c[h.type]++);
+  $("cKick").textContent=c.kick; $("cSnare").textContent=c.snare; $("cHat").textContent=c.hat; $("cClap").textContent=c.clap;
+  $("sHits").textContent=hits.length;
+}
+$("clearBtn").onclick=()=>{ hits=[]; selected=null; updateCounts(); draw(); setStatus("Cleared. Re-detect or add hits."); };
+
+/* ============================================================================
+   PLAYBACK  (schedule each slice at its grid time, looped)
+   ============================================================================ */
+function sliceBuffer(h){
+  const s0=Math.floor(h.t0*sampleRate);
+  const s1=Math.min(srcBuffer.length, Math.floor(h.t1*sampleRate)+Math.floor(0.02*sampleRate));
+  const len=Math.max(1,s1-s0);
+  const b=actx.createBuffer(srcBuffer.numberOfChannels,len,sampleRate);
+  for(let c=0;c<srcBuffer.numberOfChannels;c++){
+    const src=srcBuffer.getChannelData(c), dst=b.getChannelData(c);
+    for(let i=0;i<len;i++) dst[i]=src[s0+i]||0;
+    // tiny fade in/out to avoid clicks
+    const fade=Math.min(220,(len/8)|0);
+    for(let i=0;i<fade;i++){ dst[i]*=i/fade; dst[len-1-i]*=i/fade; }
+  }
+  return b;
+}
+$("playBtn").onclick=()=>startPlay();
+$("stopBtn").onclick=()=>stopPlay();
+function startPlay(){
+  if(!hits.length){toast("Nothing to play yet");return;}
+  ensureCtx(); stopPlay();
+  playing=true; $("playBtn").textContent="▶ Playing";
+  const dur=loopDur(), loops=64; // schedule a bunch of loop reps
+  const t0=actx.currentTime+0.08; playStart=t0;
+  const useMetro=$("metro").checked;
+  // pre-render slice buffers
+  const bufs=hits.map(h=>({h, buf:sliceBuffer(h)}));
+  for(let L=0;L<loops;L++){
+    const base=t0+L*dur;
+    bufs.forEach(({h,buf})=>{
+      const src=actx.createBufferSource(); src.buffer=buf;
+      src.connect(actx.destination); src.start(base+h.gridT);
+      playNodes.push(src);
+    });
+    if(useMetro){
+      const beat=60/curBpm();
+      for(let bt=0; bt<4*loopBars; bt++){ scheduleClick(base+bt*beat, bt%4===0); }
+    }
+  }
+  loopVisual();
+}
+function scheduleClick(when,accent){
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.frequency.value=accent?1500:1000; o.connect(g); g.connect(actx.destination);
+  g.gain.setValueAtTime(0.0001,when); g.gain.exponentialRampToValueAtTime(accent?0.25:0.13,when+0.001);
+  g.gain.exponentialRampToValueAtTime(0.0001,when+0.05);
+  o.start(when); o.stop(when+0.06); playNodes.push(o);
+}
+function stopPlay(){
+  playing=false; $("playBtn").textContent="▶ Play";
+  playNodes.forEach(n=>{try{n.stop();}catch(e){}}); playNodes=[];
+  if(rafId)cancelAnimationFrame(rafId); rafId=0; draw();
+}
+function loopVisual(){ if(!playing)return; draw(); rafId=requestAnimationFrame(loopVisual); }
+
+/* ============================================================================
+   EXPORT — WAV (offline render of the quantized arrangement)
+   ============================================================================ */
+$("wavBtn").onclick=async ()=>{
+  if(!hits.length)return;
+  setStatus("Rendering quantized WAV…",true);
+  const dur=loopDur()+0.4, ch=srcBuffer.numberOfChannels;
+  const off=new OfflineAudioContext(ch, Math.ceil(dur*sampleRate), sampleRate);
+  hits.forEach(h=>{
+    const b=sliceBufferFor(off,h);
+    const s=off.createBufferSource(); s.buffer=b; s.connect(off.destination); s.start(h.gridT);
+  });
+  const rendered=await off.startRendering();
+  const wav=encodeWAV(rendered);
+  downloadBlob(new Blob([wav],{type:"audio/wav"}), `beatbox-${curBpm()}bpm.wav`);
+  setStatus("WAV exported."); toast("WAV downloaded");
+};
+function sliceBufferFor(ctxOff,h){
+  const s0=Math.floor(h.t0*sampleRate);
+  const s1=Math.min(srcBuffer.length, Math.floor(h.t1*sampleRate)+Math.floor(0.02*sampleRate));
+  const len=Math.max(1,s1-s0);
+  const b=ctxOff.createBuffer(srcBuffer.numberOfChannels,len,sampleRate);
+  for(let c=0;c<srcBuffer.numberOfChannels;c++){
+    const src=srcBuffer.getChannelData(c), dst=b.getChannelData(c);
+    for(let i=0;i<len;i++) dst[i]=src[s0+i]||0;
+    const fade=Math.min(220,(len/8)|0);
+    for(let i=0;i<fade;i++){ dst[i]*=i/fade; dst[len-1-i]*=i/fade; }
+  }
+  return b;
+}
+function encodeWAV(buf){
+  const ch=buf.numberOfChannels, len=buf.length, sr=buf.sampleRate;
+  const data=new DataView(new ArrayBuffer(44+len*ch*2));
+  const ws=(o,s)=>{for(let i=0;i<s.length;i++)data.setUint8(o+i,s.charCodeAt(i));};
+  ws(0,"RIFF"); data.setUint32(4,36+len*ch*2,true); ws(8,"WAVE"); ws(12,"fmt ");
+  data.setUint32(16,16,true); data.setUint16(20,1,true); data.setUint16(22,ch,true);
+  data.setUint32(24,sr,true); data.setUint32(28,sr*ch*2,true); data.setUint16(32,ch*2,true);
+  data.setUint16(34,16,true); ws(36,"data"); data.setUint32(40,len*ch*2,true);
+  let off=44;
+  const chans=[]; for(let c=0;c<ch;c++)chans.push(buf.getChannelData(c));
+  for(let i=0;i<len;i++) for(let c=0;c<ch;c++){
+    let s=clamp(chans[c][i],-1,1); data.setInt16(off, s<0?s*0x8000:s*0x7FFF, true); off+=2;
+  }
+  return data.buffer;
+}
+
+/* ============================================================================
+   EXPORT — MIDI (GM drum track, quantized notes)
+   ============================================================================ */
+$("midiBtn").onclick=()=>{
+  if(!hits.length)return;
+  const bytes=buildMIDI();
+  downloadBlob(new Blob([bytes],{type:"audio/midi"}), `beatbox-${curBpm()}bpm.mid`);
+  toast("MIDI downloaded");
+};
+function vlq(v){ // variable length quantity
+  const out=[v&0x7f]; v>>=7;
+  while(v>0){ out.unshift((v&0x7f)|0x80); v>>=7; }
+  return out;
+}
+function buildMIDI(){
+  const TPQ=480, bpm=curBpm(), spb=60/bpm;
+  // events: each hit → noteOn at tick, noteOff +1/16 note
+  const events=[];
+  hits.slice().sort((a,b)=>a.gridT-b.gridT).forEach(h=>{
+    const onTick=Math.round((h.gridT/spb)*TPQ);
+    const offTick=onTick+Math.round(TPQ/4);
+    const note=GM_NOTE[h.type];
+    events.push({tick:onTick, on:true, note});
+    events.push({tick:offTick, on:false, note});
+  });
+  events.sort((a,b)=> a.tick-b.tick || (a.on?1:-1));
+  const track=[];
+  // tempo meta
+  const mpqn=Math.round(60000000/bpm);
+  track.push(0x00,0xFF,0x51,0x03,(mpqn>>16)&255,(mpqn>>8)&255,mpqn&255);
+  // time signature 4/4
+  track.push(0x00,0xFF,0x58,0x04,0x04,0x02,0x18,0x08);
+  // track name
+  const name="BeatBox Grid"; track.push(0x00,0xFF,0x03,name.length,...[...name].map(c=>c.charCodeAt(0)));
+  let last=0;
+  events.forEach(ev=>{
+    const dt=ev.tick-last; last=ev.tick;
+    track.push(...vlq(dt));
+    track.push(ev.on?0x99:0x89, ev.note, ev.on?100:0); // channel 10 (index 9) = drums
+  });
+  track.push(0x00,0xFF,0x2F,0x00); // end of track
+  // header
+  const head=[0x4D,0x54,0x68,0x64,0,0,0,6, 0,0, 0,1, (TPQ>>8)&255,TPQ&255];
+  const tlen=track.length;
+  const trk=[0x4D,0x54,0x72,0x6B,(tlen>>24)&255,(tlen>>16)&255,(tlen>>8)&255,tlen&255,...track];
+  return new Uint8Array([...head,...trk]);
+}
+function downloadBlob(blob,name){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+
+/* ============================================================================
+   CONTROL BINDINGS
+   ============================================================================ */
+genreSel.onchange=()=>{
+  const g=GENRES[genreSel.value]; if(!g)return;
+  $("bpm").value=g.bpm; $("resolution").value=g.res;
+  if(hits.length){ quantize(); refitForLoop(); draw(); setStatus(`Snapped to ${genreSel.value} — ${g.bpm} BPM.`);}
+  else { fitGrid(); draw(); }
+};
+$("bpm").oninput=()=>{ if(hits.length){quantize();refitForLoop();draw();} else {fitGrid();draw();} genreSel.value="Custom"; };
+$("resolution").onchange=()=>{ if(hits.length){quantize();refitForLoop();draw();} else {fitGrid();draw();} };
+$("swing").oninput=()=>{ $("swingVal").textContent=$("swing").value+"%"; if(hits.length){quantize();draw();} };
+$("sens").oninput=()=>{ $("sensVal").textContent=$("sens").value; };
+
+window.addEventListener("resize",()=>{ if(srcBuffer){draw();} });
+
+// initial empty grid
+fitGrid(); draw();
+setStatus("Load a beatbox recording (or record from mic) to begin.");
+$("footHint").textContent="Tip: cleaner, separated drum sounds detect best.";
+</script>
+</body>
+</html>
